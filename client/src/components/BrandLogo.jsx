@@ -1,0 +1,26 @@
+export default function BrandLogo({ size = 44 }) {
+  return (
+    <svg
+      className="brand-logo"
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <rect width="64" height="64" rx="16" fill="#0F4C45" />
+      <path
+        d="M18 40c0-8 6.5-14 14-14s14 6 14 14"
+        stroke="#F4EDE3"
+        strokeWidth="3.5"
+        strokeLinecap="round"
+      />
+      <circle cx="26" cy="28" r="2.2" fill="#E8A87C" />
+      <circle cx="32" cy="25.5" r="2.2" fill="#E8A87C" />
+      <circle cx="38" cy="28" r="2.2" fill="#E8A87C" />
+      <path d="M22 40h20" stroke="#F4EDE3" strokeWidth="3.5" strokeLinecap="round" />
+      <path d="M28 40v6M36 40v6" stroke="#F4EDE3" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  )
+}

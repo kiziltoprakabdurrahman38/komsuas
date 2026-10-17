@@ -1,0 +1,25 @@
+# KomşuAş — Proje Kuralları
+
+Bu proje, Kayseri Üniversitesi BTU dersi için geliştirilen
+**KomşuAş — Kapıdan Sıcak Ev Yemeği** konum tabanlı C2C gel-al web platformudur.
+
+## Teknoloji Yığını
+
+- **Backend:** Node.js + Express
+- **Frontend:** React.js (Vite)
+- **Stil:** Tailwind CSS
+- **Harita:** Leaflet / react-leaflet
+- **Veritabanı:** Microsoft SQL Server
+  - Spatial Data: `geography` veri tipi (konum sorguları, mesafe hesaplama)
+  - Stok işlemleri: transaction içinde `UPDLOCK` ve `ROWLOCK` hints kullanılarak
+    eşzamanlı siparişlerde stok tutarlılığı sağlanmalıdır
+  - YemekCüzdan + kapora + OTP doğrulama
+
+## Geliştirme İlkeleri
+
+- Marka adı: **KomşuAş** · Slogan: **Kapıdan Sıcak Ev Yemeği**
+- Backend kodu `server/` altında, frontend kodu `client/` altında tutulur.
+- Hassas bilgiler `.env` dosyasında saklanır; `.env` asla commit edilmez.
+- Sipariş/stok güncellemeleri daima transaction içinde ve satır kilidi ile yapılır.
+- Konum verileri MS SQL `geography` tipinde saklanır; harita tarafında Leaflet kullanılır.
+- API ve Socket.io ile gerçek zamanlı sipariş/durum/bakiye bildirimleri desteklenir.
