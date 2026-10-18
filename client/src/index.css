@@ -1182,6 +1182,40 @@ button {
   box-shadow: 0 4px 12px rgba(15, 76, 69, 0.35);
 }
 
+.user-pulse-icon {
+  background: transparent;
+  border: 0;
+}
+
+.user-pulse-ring,
+.user-pulse-dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+}
+
+.user-pulse-ring {
+  background: rgba(37, 99, 235, 0.35);
+  animation: user-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.user-pulse-dot {
+  background: #2563eb;
+  border: 2px solid #fff;
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.28);
+}
+
+@keyframes user-ping {
+  75%,
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
 .map-popup {
   max-width: 180px;
 }

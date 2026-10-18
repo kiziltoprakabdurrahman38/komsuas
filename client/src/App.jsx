@@ -699,6 +699,7 @@ function App() {
 
       <MealDetailModal
         meal={detailMeal}
+        userLocation={userGps}
         kindLabel={detailMeal ? (MEAL_FILTERS.find((item) => item.id === mealKind(detailMeal))?.label || 'Ev Yemeği') : ''}
         onClose={() => setDetailMeal(null)}
         onReserve={() => {

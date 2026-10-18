@@ -1,13 +1,26 @@
-import { useEffect, useRef } from 'react'
-import { MapContainer, Marker, TileLayer, useMap } from 'react-leaflet'
+import { useEffect, useRef, useState } from 'react'
+import { Circle, MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import { BadgeCheck, MapPin, X } from 'lucide-react'
+import { BadgeCheck, LocateFixed, MapPin, Navigation, X } from 'lucide-react'
+import { GEO_OPTIONS, pointFromPosition } from '../locationGeo.js'
+
+const OSM_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+const SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+const SAT_ATTR = 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
 
 const doorPin = L.divIcon({
   className: 'door-pin',
   html: '<span class="door-pin-dot"></span>',
   iconSize: [22, 22],
   iconAnchor: [11, 11],
+})
+
+const userDot = L.divIcon({
+  className: 'user-pulse-icon',
+  html: '<span class="user-pulse-ring"></span><span class="user-pulse-dot"></span>',
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
 })
 
 function FocusMeal({ lat, lng }) {
@@ -25,10 +38,21 @@ function FocusMeal({ lat, lng }) {
       map.invalidateSize()
       const size = map.getSize()
       if (size?.x && size?.y) map.setView([lat, lng], 15, { animate: false })
-    }, 200)
+    }, 250)
     return () => window.clearTimeout(timer)
   }, [map, lat, lng])
 
+  return null
+}
+
+function MapBridge({ mapRef }) {
+  const map = useMap()
+  useEffect(() => {
+    mapRef.current = map
+    return () => {
+      if (mapRef.current === map) mapRef.current = null
+    }
+  }, [map, mapRef])
   return null
 }
 
@@ -46,9 +70,33 @@ function allergenNote(text) {
   return match ? match[0].trim() : ''
 }
 
-export default function MealDetailModal({ meal, kindLabel, onClose, onReserve }) {
+function finitePoint(point) {
+  const lat = Number(point?.lat)
+  const lng = Number(point?.lng)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  return { lat, lng, accuracy: Number(point.accuracy) }
+}
+
+export default function MealDetailModal({ meal, kindLabel, userLocation, onClose, onReserve }) {
   const onCloseRef = useRef(onClose)
+  const mapRef = useRef(null)
   onCloseRef.current = onClose
+  const [satellite, setSatellite] = useState(false)
+  const [userPoint, setUserPoint] = useState(() => finitePoint(userLocation))
+
+  useEffect(() => {
+    setUserPoint(finitePoint(userLocation))
+  }, [userLocation])
+
+  useEffect(() => {
+    if (!meal || !navigator.geolocation) return undefined
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => setUserPoint(pointFromPosition(pos)),
+      () => {},
+      GEO_OPTIONS,
+    )
+    return () => navigator.geolocation.clearWatch(watchId)
+  }, [meal])
 
   useEffect(() => {
     if (!meal) return undefined
@@ -75,6 +123,31 @@ export default function MealDetailModal({ meal, kindLabel, onClose, onReserve })
   const hasPoint = Number.isFinite(lat) && Number.isFinite(lng)
   const allergen = allergenNote(meal.description)
   const km = Number(meal.distanceKm)
+  const accuracy = Number(userPoint?.accuracy)
+  const showAccuracy = Number.isFinite(accuracy) && accuracy >= 8 && accuracy <= 250
+
+  const openDirections = () => {
+    const destination = `${lat},${lng}`
+    const googleMapsUrl = userPoint
+      ? `https://www.google.com/maps/dir/?api=1&origin=${userPoint.lat},${userPoint.lng}&destination=${destination}&travelmode=driving`
+      : `https://www.google.com/maps/dir/?api=1&destination=${destination}`
+    window.open(googleMapsUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  const flyToUser = () => {
+    const go = (point) => {
+      if (!point) return
+      setUserPoint(point)
+      mapRef.current?.flyTo([point.lat, point.lng], 18, { animate: true, duration: 1.2 })
+    }
+    if (userPoint) go(userPoint)
+    if (!navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(
+      (pos) => go(pointFromPosition(pos)),
+      () => {},
+      GEO_OPTIONS,
+    )
+  }
 
   return (
     <div
@@ -98,7 +171,7 @@ export default function MealDetailModal({ meal, kindLabel, onClose, onReserve })
           <X size={18} />
         </button>
 
-        <div className="max-h-[90vh] min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="grid md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
             <div className="bg-slate-100">
               {meal.imageUrl ? (
@@ -148,21 +221,67 @@ export default function MealDetailModal({ meal, kindLabel, onClose, onReserve })
               )}
             </div>
             {hasPoint ? (
-              <div className="h-[240px] overflow-hidden rounded-2xl border border-slate-100">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <button
+                  type="button"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer"
+                  onClick={openDirections}
+                >
+                  <Navigation size={15} aria-hidden />
+                  <span className="sm:hidden">Yol Tarifi Al</span>
+                  <span className="hidden sm:inline">Google Haritalar&apos;da Yol Tarifi Al</span>
+                </button>
+              </div>
+            ) : null}
+            {hasPoint ? (
+              <div className="relative h-[240px] overflow-hidden rounded-2xl border border-slate-100">
                 <MapContainer
                   center={[lat, lng]}
                   zoom={15}
-                  scrollWheelZoom={false}
+                  maxZoom={19}
+                  dragging
+                  touchZoom
+                  scrollWheelZoom
                   className="h-full w-full"
                   attributionControl
                 >
                   <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution='&copy; OpenStreetMap'
+                    key={satellite ? 'satellite' : 'streets'}
+                    url={satellite ? SAT_URL : OSM_URL}
+                    attribution={satellite ? SAT_ATTR : OSM_ATTR}
+                    maxZoom={19}
                   />
                   <Marker position={[lat, lng]} icon={doorPin} />
+                  {userPoint && showAccuracy && (
+                    <Circle
+                      center={[userPoint.lat, userPoint.lng]}
+                      radius={accuracy}
+                      pathOptions={{ color: '#2563eb', weight: 0, fillColor: '#2563eb', fillOpacity: 0.18 }}
+                    />
+                  )}
+                  {userPoint && (
+                    <Marker position={[userPoint.lat, userPoint.lng]} icon={userDot} zIndexOffset={800}>
+                      <Popup>📍 Sizin Konumunuz</Popup>
+                    </Marker>
+                  )}
                   <FocusMeal lat={lat} lng={lng} />
+                  <MapBridge mapRef={mapRef} />
                 </MapContainer>
+                <button
+                  type="button"
+                  className="absolute bottom-3 left-3 z-[1000] bg-white/95 text-slate-700 hover:bg-slate-100 px-2.5 py-1.5 rounded-lg shadow-md border border-slate-200 text-xs font-semibold flex items-center gap-1.5"
+                  onClick={() => setSatellite((on) => !on)}
+                >
+                  {satellite ? '🗺️ Harita' : '🛰️ Uydu'}
+                </button>
+                <button
+                  type="button"
+                  className="absolute bottom-10 right-3 z-[1000] w-9 h-9 bg-white text-slate-700 hover:text-blue-600 rounded-lg shadow-md border border-slate-200 flex items-center justify-center cursor-pointer hover:bg-blue-50 transition-all"
+                  onClick={flyToUser}
+                  aria-label="Konumuma git"
+                >
+                  <LocateFixed size={16} aria-hidden />
+                </button>
               </div>
             ) : (
               <p className="rounded-2xl bg-slate-50 px-3 py-4 text-sm text-slate-500">
@@ -176,7 +295,7 @@ export default function MealDetailModal({ meal, kindLabel, onClose, onReserve })
           </div>
         </div>
 
-        <footer className="flex flex-col gap-3 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <footer className="z-10 flex shrink-0 flex-col gap-3 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-slate-600">
             <p>Kapora %{rate}: <strong className="text-slate-900">{deposit.toFixed(2)} ₺</strong></p>
             <p>Kapıda nakit: <strong className="text-slate-900">{cash.toFixed(2)} ₺</strong></p>
