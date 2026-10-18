@@ -82,10 +82,11 @@ a,
   top: 0;
   z-index: 40;
   padding: 0.85rem 0 0.9rem;
-  border-bottom: 1px solid rgba(2, 44, 34, 0.05);
-  background: rgba(244, 247, 245, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(6, 78, 59, 0.05);
+  background: linear-gradient(to bottom, rgba(238, 244, 240, 0.95), rgba(242, 247, 243, 0.9), transparent);
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   overflow: visible;
 }
 
@@ -358,6 +359,19 @@ a,
   width: 100%;
   height: 100%;
   z-index: 0;
+}
+
+#meal-detail-map,
+.meal-detail-map {
+  min-height: 220px;
+  height: 240px;
+}
+
+#meal-detail-map .leaflet-container,
+.meal-detail-map .leaflet-container {
+  width: 100%;
+  min-height: 220px;
+  height: 240px;
 }
 
 /* Zoom: sol alt */
@@ -2114,15 +2128,21 @@ a,
   min-width: 0;
   height: 2.75rem;
   padding: 0 0.85rem 0 1rem;
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  border: 1px solid rgba(2, 44, 34, 0.1);
   border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.8);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
   color: #1e293b;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.search-bar:hover,
+.search-bar:focus-within {
+  background: #fff;
 }
 
 .search-bar:focus-within {
-  background: #fff;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
 }
 
 .search-bar input {
@@ -2401,8 +2421,9 @@ a,
     margin-left: -0.75rem;
     margin-right: -0.75rem;
     padding: env(safe-area-inset-top, 0px) 0.75rem 0.75rem;
-    background: rgba(244, 247, 245, 0.85);
-    backdrop-filter: blur(16px);
+    background: linear-gradient(to bottom, rgba(238, 244, 240, 0.95), rgba(242, 247, 243, 0.9), transparent);
+    box-shadow: none;
+    backdrop-filter: blur(12px);
   }
 
   .search-bar {

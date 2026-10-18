@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Circle, MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
+import { Circle, CircleMarker, MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { BadgeCheck, LocateFixed, Map as MapIcon, MapPin, Navigation, Satellite, X } from 'lucide-react'
 import { GEO_OPTIONS, pointFromPosition } from '../locationGeo.js'
@@ -28,17 +28,16 @@ function FocusMeal({ lat, lng }) {
 
   useEffect(() => {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined
+    let placed = false
     const place = () => {
       map.invalidateSize()
       const size = map.getSize()
-      if (size?.x && size?.y) map.setView([lat, lng], 15, { animate: false })
+      if (!(size?.x && size?.y) || placed) return
+      map.setView([lat, lng], 15, { animate: false })
+      placed = true
     }
     place()
-    const timer = window.setTimeout(() => {
-      map.invalidateSize()
-      const size = map.getSize()
-      if (size?.x && size?.y) map.setView([lat, lng], 15, { animate: false })
-    }, 250)
+    const timer = window.setTimeout(place, 300)
     return () => window.clearTimeout(timer)
   }, [map, lat, lng])
 
@@ -84,25 +83,29 @@ function finitePoint(point) {
   return { lat, lng, accuracy: Number(point.accuracy) }
 }
 
-export default function MealDetailModal({ meal, kindLabel, userLocation, onClose, onReserve }) {
+export default function MealDetailModal({ meal, kindLabel, onClose, onReserve }) {
   const onCloseRef = useRef(onClose)
   const mapRef = useRef(null)
   onCloseRef.current = onClose
   const [isSatellite, setIsSatellite] = useState(false)
-  const [userPoint, setUserPoint] = useState(() => finitePoint(userLocation))
-
-  useEffect(() => {
-    setUserPoint(finitePoint(userLocation))
-  }, [userLocation])
+  const [deviceRealGpsLocation, setDeviceRealGpsLocation] = useState(null)
 
   useEffect(() => {
     if (!meal || !navigator.geolocation) return undefined
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => setUserPoint(pointFromPosition(pos)),
+      (pos) => setDeviceRealGpsLocation(pointFromPosition(pos)),
       () => {},
       GEO_OPTIONS,
     )
     return () => navigator.geolocation.clearWatch(watchId)
+  }, [meal])
+
+  useEffect(() => {
+    if (!meal) return undefined
+    const timer = window.setTimeout(() => {
+      mapRef.current?.invalidateSize()
+    }, 300)
+    return () => window.clearTimeout(timer)
   }, [meal])
 
   useEffect(() => {
@@ -130,24 +133,24 @@ export default function MealDetailModal({ meal, kindLabel, userLocation, onClose
   const hasPoint = Number.isFinite(lat) && Number.isFinite(lng)
   const allergen = allergenNote(meal.description)
   const km = Number(meal.distanceKm)
-  const accuracy = Number(userPoint?.accuracy)
+  const accuracy = Number(deviceRealGpsLocation?.accuracy)
   const showAccuracy = Number.isFinite(accuracy) && accuracy >= 8 && accuracy <= 250
 
   const openDirections = () => {
     const destination = `${lat},${lng}`
-    const googleMapsUrl = userPoint
-      ? `https://www.google.com/maps/dir/?api=1&origin=${userPoint.lat},${userPoint.lng}&destination=${destination}&travelmode=driving`
-      : `https://www.google.com/maps/dir/?api=1&destination=${destination}`
-    window.open(googleMapsUrl, '_blank', 'noopener,noreferrer')
+    let mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`
+    if (deviceRealGpsLocation?.lat && deviceRealGpsLocation?.lng) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${deviceRealGpsLocation.lat},${deviceRealGpsLocation.lng}&destination=${destination}&travelmode=driving`
+    }
+    window.open(mapsUrl, '_blank', 'noopener,noreferrer')
   }
 
   const flyToUser = () => {
     const go = (point) => {
-      if (!point) return
-      setUserPoint(point)
+      if (!point?.lat || !point?.lng) return
+      setDeviceRealGpsLocation(point)
       mapRef.current?.flyTo([point.lat, point.lng], 18, { animate: true, duration: 1.2 })
     }
-    if (userPoint) go(userPoint)
     if (!navigator.geolocation) return
     navigator.geolocation.getCurrentPosition(
       (pos) => go(pointFromPosition(pos)),
@@ -229,19 +232,10 @@ export default function MealDetailModal({ meal, kindLabel, userLocation, onClose
               )}
             </div>
             {hasPoint ? (
-              <div className="mb-2 hidden md:flex">
-                <button
-                  type="button"
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-3.5 py-2 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer"
-                  onClick={openDirections}
-                >
-                  <Navigation size={15} aria-hidden />
-                  Google Haritalar&apos;da Yol Tarifi Al
-                </button>
-              </div>
-            ) : null}
-            {hasPoint ? (
-              <div className="relative h-[210px] overflow-hidden rounded-2xl border border-slate-100 md:h-[240px]">
+              <div
+                id="meal-detail-map"
+                className="meal-detail-map relative z-0 my-3 w-full overflow-hidden rounded-2xl border border-slate-200/90 shadow-inner"
+              >
                 <MapContainer
                   center={[lat, lng]}
                   zoom={15}
@@ -259,17 +253,24 @@ export default function MealDetailModal({ meal, kindLabel, userLocation, onClose
                     maxZoom={19}
                   />
                   <Marker position={[lat, lng]} icon={doorPin} />
-                  {userPoint && showAccuracy && (
+                  {deviceRealGpsLocation && showAccuracy && (
                     <Circle
-                      center={[userPoint.lat, userPoint.lng]}
+                      center={[deviceRealGpsLocation.lat, deviceRealGpsLocation.lng]}
                       radius={accuracy}
                       pathOptions={{ color: '#2563eb', weight: 0, fillColor: '#2563eb', fillOpacity: 0.18 }}
                     />
                   )}
-                  {userPoint && (
-                    <Marker position={[userPoint.lat, userPoint.lng]} icon={userDot} zIndexOffset={800}>
-                      <Popup>📍 Sizin Konumunuz</Popup>
-                    </Marker>
+                  {deviceRealGpsLocation && (
+                    <>
+                      <CircleMarker
+                        center={[deviceRealGpsLocation.lat, deviceRealGpsLocation.lng]}
+                        radius={8}
+                        pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#2563eb', fillOpacity: 1 }}
+                      >
+                        <Popup>📍 Sizin Konumunuz</Popup>
+                      </CircleMarker>
+                      <Marker position={[deviceRealGpsLocation.lat, deviceRealGpsLocation.lng]} icon={userDot} zIndexOffset={800} />
+                    </>
                   )}
                   <FocusMeal lat={lat} lng={lng} />
                   <MapBridge mapRef={mapRef} />
@@ -279,9 +280,9 @@ export default function MealDetailModal({ meal, kindLabel, userLocation, onClose
                   ref={guardMapButton}
                   title="Uydu / Harita Görünümünü Değiştir"
                   aria-label="Uydu Harita Geçişi"
-                  className={`absolute top-3 right-3 z-[1000] w-10 h-10 bg-white/95 hover:bg-white text-slate-700 rounded-xl shadow-md hover:shadow-lg border flex items-center justify-center transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95 ${
+                  className={`absolute top-3 right-3 z-[500] flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border bg-white/95 text-slate-700 shadow-md transition-all duration-200 hover:scale-105 hover:bg-white hover:shadow-lg active:scale-95 ${
                     isSatellite
-                      ? 'ring-2 ring-emerald-500 border-transparent text-emerald-600'
+                      ? 'border-transparent text-emerald-600 ring-2 ring-emerald-500'
                       : 'border-slate-200/90'
                   }`}
                   onPointerDown={(event) => event.stopPropagation()}
@@ -294,8 +295,13 @@ export default function MealDetailModal({ meal, kindLabel, userLocation, onClose
                 </button>
                 <button
                   type="button"
-                  className="absolute bottom-10 right-3 z-[1000] h-10 w-10 bg-white text-slate-700 hover:text-blue-600 rounded-lg shadow-md border border-slate-200 flex items-center justify-center cursor-pointer hover:bg-blue-50 transition-all"
-                  onClick={flyToUser}
+                  ref={guardMapButton}
+                  className="absolute bottom-10 right-3 z-[500] flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-md transition-all hover:bg-blue-50 hover:text-blue-600"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    flyToUser()
+                  }}
                   aria-label="Konumuma git"
                 >
                   <LocateFixed size={16} aria-hidden />
@@ -310,20 +316,20 @@ export default function MealDetailModal({ meal, kindLabel, userLocation, onClose
               <MapPin size={16} className="mt-0.5 shrink-0 text-emerald-700" aria-hidden />
               {doorLabel(meal)}
             </p>
+            {hasPoint ? (
+              <button
+                type="button"
+                className="mt-3 flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg"
+                onClick={openDirections}
+              >
+                <Navigation size={16} aria-hidden />
+                Google Haritalar&apos;da Yol Tarifi Al
+              </button>
+            ) : null}
           </div>
         </div>
 
         <footer className="z-10 flex shrink-0 flex-col gap-3 border-t border-slate-100 bg-white px-5 py-4 md:flex-row md:items-center md:justify-between">
-          {hasPoint && (
-            <button
-              type="button"
-              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3.5 text-sm font-semibold text-white shadow-md md:hidden"
-              onClick={openDirections}
-            >
-              <Navigation size={16} aria-hidden />
-              Google Haritalar&apos;da Yol Tarifi Al
-            </button>
-          )}
           <div className="text-sm text-slate-600">
             <p>Kapora %{rate}: <strong className="text-slate-900">{deposit.toFixed(2)} ₺</strong></p>
             <p>Kapıda nakit: <strong className="text-slate-900">{cash.toFixed(2)} ₺</strong></p>

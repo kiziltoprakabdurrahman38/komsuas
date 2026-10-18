@@ -472,7 +472,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <header className="site-header market-header sticky top-0 z-40 border-b border-emerald-950/5 bg-[#f4f7f5]/85 backdrop-blur-md transition-all animate-fade-down">
+      <header className="site-header market-header sticky top-0 z-40 border-b border-emerald-900/5 bg-gradient-to-b from-[#eef4f0]/95 via-[#f2f7f3]/90 to-transparent backdrop-blur-md transition-all animate-fade-down">
         <div className="header-brand">
           <button
             type="button"
@@ -489,7 +489,7 @@ function App() {
           <LocationSelector city={selectedCity} district={selectedDistrict} onSelect={choosePlace} />
         </div>
 
-        <form className="search-bar rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm focus-within:bg-white" role="search" onSubmit={(event) => event.preventDefault()}>
+        <form className="search-bar rounded-2xl border border-emerald-950/10 bg-white/80 px-4 py-2.5 text-sm text-slate-800 shadow-sm transition-all hover:bg-white focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-500/20" role="search" onSubmit={(event) => event.preventDefault()}>
           <Search size={18} aria-hidden />
           <input
             ref={searchRef}
@@ -790,7 +790,6 @@ function App() {
 
       <MealDetailModal
         meal={detailMeal}
-        userLocation={userGps}
         kindLabel={detailMeal ? (MEAL_FILTERS.find((item) => item.id === mealKind(detailMeal))?.label || 'Ev Yemeği') : ''}
         onClose={() => setDetailMeal(null)}
         onReserve={() => {

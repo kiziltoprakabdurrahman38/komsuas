@@ -162,7 +162,7 @@ export default function LocationSelector({ city, district, onSelect }) {
     <div className="relative" ref={rootRef}>
       <button
         type="button"
-        className="flex min-h-11 max-w-[58vw] cursor-pointer items-center gap-1.5 rounded-full border border-emerald-950/10 bg-white/45 px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-white/80 md:max-w-none"
+        className="flex min-h-11 max-w-[58vw] cursor-pointer items-center gap-1.5 rounded-full border border-emerald-950/10 bg-white/70 px-3.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-white md:max-w-none md:text-sm"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         onClick={() => setIsOpen((open) => !open)}
