@@ -31,6 +31,15 @@ import {
   pointFromPosition,
   reversePlaceLabel,
 } from './locationGeo.js'
+import { fallbackMealsNear, mealKind } from './fallbackMeals.js'
+
+const MEAL_FILTERS = [
+  { id: 'all', label: 'Tümü' },
+  { id: 'ana', label: 'Ana yemek' },
+  { id: 'hamur', label: 'Hamur işi' },
+  { id: 'corba', label: 'Çorba' },
+  { id: 'tatli', label: 'Tatlı' },
+]
 
 const AUTH_STORAGE_KEY = 'evyemegi_auth'
 const api = axios.create({ baseURL: apiBaseUrl })
@@ -69,9 +78,11 @@ function App() {
   const [locationLabel, setLocationLabel] = useState('')
   const [locationDenied, setLocationDenied] = useState(false)
 
-  const [meals, setMeals] = useState([])
+  const [meals, setMeals] = useState(() => fallbackMealsNear(null))
   const [loadingMeals, setLoadingMeals] = useState(false)
   const [mealsError, setMealsError] = useState(null)
+  const [usingFallback, setUsingFallback] = useState(true)
+  const [mealFilter, setMealFilter] = useState('all')
   const [selectedId, setSelectedId] = useState(null)
 
   const [auth, setAuth] = useState(() => loadStoredAuth())
@@ -122,10 +133,16 @@ function App() {
     return true
   }
 
+  const showFallbackMeals = useCallback((position) => {
+    setMeals(fallbackMealsNear(position))
+    setUsingFallback(true)
+    setMealsError(null)
+  }, [])
+
   const fetchMeals = useCallback(async (position) => {
     if (!position?.lat || !position?.lng) {
-      setMeals([])
-      setMealsError('Yakınınızdaki yemekleri görebilmek için konum izni vermelisiniz')
+      showFallbackMeals(null)
+      setLoadingMeals(false)
       return
     }
     setLoadingMeals(true)
@@ -136,19 +153,16 @@ function App() {
           lat: position.lat,
           lng: position.lng,
         },
+        timeout: 8000,
       })
       setMeals(data.meals || [])
-    } catch (err) {
-      setMeals([])
-      setMealsError(
-        err.response?.data?.error ||
-          err.message ||
-          'Yakınınızdaki yemekleri görebilmek için konum izni vermelisiniz',
-      )
+      setUsingFallback(false)
+    } catch {
+      showFallbackMeals(position)
     } finally {
       setLoadingMeals(false)
     }
-  }, [])
+  }, [showFallbackMeals])
 
   const labelAnchorRef = useRef(null)
   const labelSeqRef = useRef(0)
@@ -182,8 +196,7 @@ function App() {
   useEffect(() => {
     if (!navigator.geolocation) {
       setLocationDenied(true)
-      setMeals([])
-      setMealsError('Yakınınızdaki yemekleri görebilmek için konum izni vermelisiniz')
+      showFallbackMeals(null)
       return undefined
     }
 
@@ -205,15 +218,14 @@ function App() {
       if (err?.code === 1 && !seen.point) {
         setUserGps(null)
         setLocationDenied(true)
-        setMeals([])
-        setMealsError('Yakınınızdaki yemekleri görebilmek için konum izni vermelisiniz')
+        showFallbackMeals(null)
       }
     }
 
     navigator.geolocation.getCurrentPosition(onFix, onError, GEO_OPTIONS)
     const watchId = navigator.geolocation.watchPosition(onFix, onError, GEO_OPTIONS)
     return () => navigator.geolocation.clearWatch(watchId)
-  }, [applyUserPoint])
+  }, [applyUserPoint, showFallbackMeals])
 
   useEffect(() => {
     if (!user) return undefined
@@ -292,13 +304,20 @@ function App() {
       },
       () => {
         setLocationDenied(true)
-        setMealsError('Yakınınızdaki yemekleri görebilmek için konum izni vermelisiniz')
+        showFallbackMeals(null)
       },
       GEO_OPTIONS,
     )
   }
 
   const handleReserveClick = (meal) => {
+    if (usingFallback || String(meal.id).startsWith('mock-')) {
+      setToast({
+        title: 'Örnek vitrin',
+        message: 'Canlı liste bağlanınca bu ilanı rezerve edebilirsin.',
+      })
+      return
+    }
     if (!user) {
       openAuth('login', { type: 'reserve', meal })
       return
@@ -412,6 +431,10 @@ function App() {
     if (action?.type === 'reserve' && action.meal) setReserveMeal(action.meal)
     if (action?.type === 'share') setActiveTab('share')
   }
+
+  const visibleMeals = meals.filter(
+    (meal) => mealFilter === 'all' || mealKind(meal) === mealFilter,
+  )
 
   return (
     <div className="app-shell">
@@ -577,7 +600,7 @@ function App() {
                   }}
                   onGpsError={() => {
                     setLocationDenied(true)
-                    setMealsError('Yakınınızdaki yemekleri görebilmek için konum izni vermelisiniz')
+                    showFallbackMeals(userGps)
                   }}
                 />
               </div>
@@ -589,17 +612,37 @@ function App() {
                 <p>
                   {loadingMeals
                     ? 'Yemekler yükleniyor…'
-                    : `${meals.length} aktif ilan · gerçek aşçı adlarıyla`}
+                    : usingFallback
+                      ? `${visibleMeals.length} örnek ilan`
+                      : `${visibleMeals.length} aktif ilan`}
                 </p>
               </div>
 
+              <div className="meal-filters" role="tablist" aria-label="Yemek türü">
+                {MEAL_FILTERS.map((filter) => (
+                  <button
+                    key={filter.id}
+                    type="button"
+                    className={`meal-filter ${mealFilter === filter.id ? 'is-active' : ''}`}
+                    onClick={() => setMealFilter(filter.id)}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+
+              {usingFallback && (
+                <p className="meal-fallback-note">
+                  Örnek Kayseri vitrini gösteriliyor. Canlı liste bağlanınca kendiliğinden güncellenir.
+                </p>
+              )}
               {mealsError && <p className="form-feedback is-error">{mealsError}</p>}
-              {!loadingMeals && !mealsError && meals.length === 0 && (
-                <p className="empty-state">Bu bölgede aktif ilan yok. Şehir arayın.</p>
+              {!loadingMeals && !mealsError && visibleMeals.length === 0 && (
+                <p className="empty-state">Bu türde yakın ilan yok.</p>
               )}
 
               <ul className="meal-grid">
-                {meals.map((meal, index) => (
+                {visibleMeals.map((meal, index) => (
                   <li
                     key={meal.id}
                     className={`meal-card animate-rise ${selectedId === meal.id ? 'is-selected' : ''}`}
