@@ -127,22 +127,22 @@ SET
 WHERE IsVerified = 0 OR Bakiye IS NULL;
 GO
 
--- Örnek yemek görselleri (yoksa)
-UPDATE dbo.Meals SET GorselUrl = N'https://images.unsplash.com/photo-1516684669134-de6f7c473a2a?w=800&q=80'
-WHERE Baslik LIKE N'%Nohut%' AND (GorselUrl IS NULL OR GorselUrl = N'');
+-- Örnek yemek görselleri (Wikimedia Commons, yemeğin kendi fotoğrafı)
+UPDATE dbo.Meals SET GorselUrl = N'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Nohut_yahni.jpg/960px-Nohut_yahni.jpg'
+WHERE Baslik = N'Nohut Pilav';
 
-UPDATE dbo.Meals SET GorselUrl = N'https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=800&q=80'
-WHERE Baslik LIKE N'%Mant%' AND (GorselUrl IS NULL OR GorselUrl = N'');
+UPDATE dbo.Meals SET GorselUrl = N'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Kayseri_mant%C4%B1s%C4%B1.jpg/960px-Kayseri_mant%C4%B1s%C4%B1.jpg'
+WHERE Baslik = N'Kayseri Mantısı';
 
-UPDATE dbo.Meals SET GorselUrl = N'https://images.unsplash.com/photo-1547592166-23ac45744acd?w=800&q=80'
-WHERE Baslik LIKE N'%Fasulye%' AND (GorselUrl IS NULL OR GorselUrl = N'');
+UPDATE dbo.Meals SET GorselUrl = N'https://upload.wikimedia.org/wikipedia/commons/thumb/6/61/Etli_kuru_fasulye.jpg/960px-Etli_kuru_fasulye.jpg'
+WHERE Baslik = N'Kuru Fasulye';
 
-UPDATE dbo.Meals SET GorselUrl = N'https://images.unsplash.com/photo-1529042410759-befb1204b468?w=800&q=80'
-WHERE Baslik LIKE N'%K%fte%' AND (GorselUrl IS NULL OR GorselUrl = N'');
+UPDATE dbo.Meals SET GorselUrl = N'https://upload.wikimedia.org/wikipedia/commons/thumb/7/78/%C4%B0%C3%A7li_k%C3%B6fte_20250205.jpg/960px-%C4%B0%C3%A7li_k%C3%B6fte_20250205.jpg'
+WHERE Baslik = N'İçli Köfte';
 
-UPDATE dbo.Meals SET GorselUrl = N'https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=800&q=80'
-WHERE Baslik LIKE N'%Makarna%' AND (GorselUrl IS NULL OR GorselUrl = N'');
+UPDATE dbo.Meals SET GorselUrl = N'https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/Pastitsio_homemade.jpg/960px-Pastitsio_homemade.jpg'
+WHERE Baslik = N'Fırın Makarna';
 
-UPDATE dbo.Meals SET GorselUrl = N'https://images.unsplash.com/photo-1604908177330-44683a29c595?w=800&q=80'
-WHERE Baslik LIKE N'%Bamya%' AND (GorselUrl IS NULL OR GorselUrl = N'');
+UPDATE dbo.Meals SET GorselUrl = N'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Etli_kuru_bamya.jpg/960px-Etli_kuru_bamya.jpg'
+WHERE Baslik = N'Etli Bamya';
 GO
