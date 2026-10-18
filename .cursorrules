@@ -23,3 +23,11 @@ Bu proje, Kayseri Üniversitesi BTU dersi için geliştirilen
 - Sipariş/stok güncellemeleri daima transaction içinde ve satır kilidi ile yapılır.
 - Konum verileri MS SQL `geography` tipinde saklanır; harita tarafında Leaflet kullanılır.
 - API ve Socket.io ile gerçek zamanlı sipariş/durum/bakiye bildirimleri desteklenir.
+
+## Teslim
+
+KURAL: Bu projede verilen her görevi (kod yazma, UI düzeltme, hata giderme vb.) tamamladıktan sonra KULLANICIYA SORMADAN otomatik olarak:
+1. Projenin build aldığını doğrula (hata/eksik import olmasın).
+2. Değişiklikleri otomatik olarak 'git add .', anlamlı bir commit mesajıyla 'git commit' ve 'git push origin main' komutlarıyla canlıya gönder.
+3. Yanıtında push işleminin tamamlandığını ve commit özetini belirt.
+`.env` ve kimlik bilgisi içeren dosyalar commit edilmez.
