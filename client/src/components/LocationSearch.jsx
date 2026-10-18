@@ -54,7 +54,7 @@ function formatNominatimLabel(item) {
   return item.display_name
 }
 
-export default function LocationSearch({ onSelect }) {
+export default function LocationSearch({ onSelect, locationLabel = '' }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [history, setHistory] = useState(() => loadHistory())
@@ -63,6 +63,12 @@ export default function LocationSearch({ onSelect }) {
   const [error, setError] = useState(null)
   const wrapRef = useRef(null)
   const abortRef = useRef(null)
+  const focusedRef = useRef(false)
+
+  useEffect(() => {
+    if (!locationLabel || focusedRef.current) return
+    setQuery(locationLabel)
+  }, [locationLabel])
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -154,7 +160,13 @@ export default function LocationSearch({ onSelect }) {
             setQuery(e.target.value)
             setOpen(true)
           }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            focusedRef.current = true
+            setOpen(true)
+          }}
+          onBlur={() => {
+            focusedRef.current = false
+          }}
           placeholder="Mahalle, sokak veya ilçe ara…"
           autoComplete="off"
         />

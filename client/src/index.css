@@ -340,6 +340,39 @@ button {
   cursor: not-allowed;
 }
 
+.leaflet-div-icon.user-location-marker {
+  background: transparent;
+  border: 0;
+}
+
+.user-location-dot {
+  display: block;
+  width: 22px;
+  height: 22px;
+  margin: 3px;
+  border-radius: 50%;
+  background: #1f7a6e;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px #0f4c45, 0 6px 14px rgba(15, 76, 69, 0.35);
+  cursor: grab;
+}
+
+.user-location-marker:active .user-location-dot {
+  cursor: grabbing;
+}
+
+.map-set-here {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  background: #0f4c45;
+  color: #fff;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 /* Katman: sağ üst, tek kare ikon */
 .map-layer-toggle {
   position: absolute;

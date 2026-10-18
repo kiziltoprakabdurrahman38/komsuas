@@ -5,7 +5,6 @@ import {
   Marker,
   Popup,
   Circle,
-  CircleMarker,
   ZoomControl,
   useMap,
   useMapEvents,
@@ -15,6 +14,7 @@ import { Crosshair, Map as MapIcon, Satellite } from 'lucide-react'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+import { GEO_OPTIONS, pointFromPosition } from '../locationGeo.js'
 
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -24,6 +24,13 @@ L.Icon.Default.mergeOptions({
 })
 
 const SERVICE_RADIUS_M = 30000
+
+const userLocationIcon = L.divIcon({
+  className: 'user-location-marker',
+  html: '<span class="user-location-dot"></span>',
+  iconSize: [28, 28],
+  iconAnchor: [14, 14],
+})
 
 const OSM_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 const OSM_ATTR =
@@ -98,6 +105,40 @@ function CenterPin() {
   )
 }
 
+function SetHereClick({ enabled, onPick }) {
+  const [spot, setSpot] = useState(null)
+  useMapEvents({
+    click(e) {
+      if (!enabled) return
+      const target = e.originalEvent?.target
+      if (target?.closest?.('.leaflet-marker-icon, .leaflet-popup, .user-location-marker')) {
+        return
+      }
+      setSpot(e.latlng)
+    },
+  })
+
+  if (!enabled || !spot) return null
+
+  return (
+    <Popup
+      position={[spot.lat, spot.lng]}
+      eventHandlers={{ remove: () => setSpot(null) }}
+    >
+      <button
+        type="button"
+        className="map-set-here"
+        onClick={() => {
+          onPick?.({ lat: spot.lat, lng: spot.lng })
+          setSpot(null)
+        }}
+      >
+        Konumumu burası yap
+      </button>
+    </Popup>
+  )
+}
+
 function MapApiBinder({ onMap }) {
   const map = useMap()
   useEffect(() => {
@@ -117,10 +158,12 @@ export default function MealMap({
   onMapClick,
   followCenter = true,
   flyToTarget = null,
+  onUserPositionChange,
+  onGpsError,
 }) {
   const [baseLayer, setBaseLayer] = useState('streets') // streets | satellite
-  const [showServiceCircle, setShowServiceCircle] = useState(true)
   const [mapInstance, setMapInstance] = useState(null)
+  const showServiceCircle = true
 
   const center = useMemo(
     () => [userPosition.lat, userPosition.lng],
@@ -138,34 +181,33 @@ export default function MealMap({
   }, [])
 
   const goToMyLocation = () => {
-    if (!mapInstance || !locateTarget) return
-
-    if (pickMode) {
-      mapInstance.flyTo([locateTarget.lat, locateTarget.lng], 18, {
-        animate: true,
-        duration: 1.2,
-      })
+    if (!navigator.geolocation) {
+      onGpsError?.()
       return
     }
 
-    const latlng = L.latLng(locateTarget.lat, locateTarget.lng)
-    const bounds = latlng.toBounds(SERVICE_RADIUS_M)
-    const circle = L.circle(latlng, { radius: SERVICE_RADIUS_M })
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const next = pointFromPosition(pos)
+        onUserPositionChange?.(next, { gps: true })
+        const zoom = pickMode ? 18 : 16
+        mapInstance?.flyTo([next.lat, next.lng], zoom, {
+          duration: 1.1,
+          easeLinearity: 0.25,
+        })
+        if (pickMode) onMapClick?.(next)
+      },
+      () => onGpsError?.(),
+      GEO_OPTIONS,
+    )
+  }
 
-    setShowServiceCircle(true)
-
-    mapInstance.flyTo(latlng, Math.max(mapInstance.getZoom(), 11), {
-      duration: 0.85,
+  const placeUserAt = (next) => {
+    onUserPositionChange?.(next, { manual: true })
+    mapInstance?.flyTo([next.lat, next.lng], 16, {
+      duration: 0.8,
       easeLinearity: 0.25,
     })
-
-    window.setTimeout(() => {
-      mapInstance.flyToBounds(circle.getBounds?.() || bounds, {
-        padding: [48, 48],
-        maxZoom: 12,
-        duration: 0.9,
-      })
-    }, 400)
   }
 
   return (
@@ -188,6 +230,7 @@ export default function MealMap({
         <Recenter position={center} zoom={zoom} enabled={followCenter && !flyToTarget} />
         <FlyToTarget target={flyToTarget} />
         <CenterPinReporter enabled={pickMode} onCenter={onMapClick} />
+        <SetHereClick enabled={!pickMode} onPick={placeUserAt} />
 
         {!pickMode && locateTarget && showServiceCircle && (
           <Circle
@@ -203,23 +246,21 @@ export default function MealMap({
           />
         )}
 
-        {!pickMode && (
-          <CircleMarker
-            center={
-              locateTarget
-                ? [locateTarget.lat, locateTarget.lng]
-                : center
-            }
-            radius={10}
-            pathOptions={{
-              color: '#0f4c45',
-              fillColor: '#1f7a6e',
-              fillOpacity: 0.9,
-              weight: 3,
+        {!pickMode && locateTarget && (
+          <Marker
+            position={[locateTarget.lat, locateTarget.lng]}
+            icon={userLocationIcon}
+            draggable
+            zIndexOffset={800}
+            eventHandlers={{
+              dragend(event) {
+                const latlng = event.target.getLatLng()
+                onUserPositionChange?.({ lat: latlng.lat, lng: latlng.lng }, { manual: true })
+              },
             }}
           >
-            <Popup>Konumunuz · 30 km hizmet bölgesi</Popup>
-          </CircleMarker>
+            <Popup>Konumunuz. Pini evinizin önüne sürükleyebilirsiniz.</Popup>
+          </Marker>
         )}
 
         {!pickMode &&
@@ -274,8 +315,7 @@ export default function MealMap({
         type="button"
         className="map-locate-btn"
         onClick={goToMyLocation}
-        disabled={!locateTarget}
-        title={pickMode ? 'Konumuma git · sokak seviyesi' : 'Konumumu göster · 30 km bölge'}
+        title={pickMode ? 'Konumuma git · sokak seviyesi' : 'Konumumu göster'}
         aria-label={pickMode ? 'Konumuma git' : 'Konumumu göster'}
       >
         <Crosshair size={20} aria-hidden />

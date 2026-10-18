@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { io } from 'socket.io-client'
 import {
@@ -25,6 +25,12 @@ import ReviewModal from './components/ReviewModal.jsx'
 import RatingBadge from './components/RatingBadge.jsx'
 import { TURKEY_CENTER } from './data/cities.js'
 import { apiBaseUrl, apiOrigin } from './apiConfig.js'
+import {
+  GEO_OPTIONS,
+  movedMeters,
+  pointFromPosition,
+  reversePlaceLabel,
+} from './locationGeo.js'
 
 const AUTH_STORAGE_KEY = 'evyemegi_auth'
 const api = axios.create({ baseURL: apiBaseUrl })
@@ -60,6 +66,7 @@ function App() {
   const [mapZoom, setMapZoom] = useState(TURKEY_CENTER.zoom)
   const [flyToTarget, setFlyToTarget] = useState(null)
   const [userGps, setUserGps] = useState(null)
+  const [locationLabel, setLocationLabel] = useState('')
   const [locationDenied, setLocationDenied] = useState(false)
 
   const [meals, setMeals] = useState([])
@@ -143,33 +150,70 @@ function App() {
     }
   }, [])
 
+  const labelAnchorRef = useRef(null)
+  const labelSeqRef = useRef(0)
+  const manualLockRef = useRef(false)
+
+  const applyUserPoint = useCallback((next, { fly = false, manual = false } = {}) => {
+    if (manual) manualLockRef.current = true
+    const point = { lat: next.lat, lng: next.lng }
+    setUserGps(point)
+    setMapCenter(point)
+    setMapZoom(16)
+    if (fly) {
+      setFlyToTarget({ id: Date.now(), ...point, zoom: 16 })
+    }
+    setLocationDenied(false)
+    setMealsError(null)
+    fetchMeals(point)
+
+    const dist = movedMeters(labelAnchorRef.current, point)
+    if (labelAnchorRef.current && dist < 80) return
+    labelAnchorRef.current = point
+    const seq = labelSeqRef.current + 1
+    labelSeqRef.current = seq
+    reversePlaceLabel(point.lat, point.lng)
+      .then((label) => {
+        if (seq === labelSeqRef.current && label) setLocationLabel(label)
+      })
+      .catch(() => {})
+  }, [fetchMeals])
+
   useEffect(() => {
     if (!navigator.geolocation) {
       setLocationDenied(true)
       setMeals([])
       setMealsError('Yakınınızdaki yemekleri görebilmek için konum izni vermelisiniz')
-      return
+      return undefined
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const next = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-        setUserGps(next)
-        setMapCenter(next)
-        setMapZoom(13)
-        setFlyToTarget({ id: Date.now(), ...next, zoom: 13 })
-        setLocationDenied(false)
-        fetchMeals(next)
-      },
-      () => {
+    const seen = { point: null, accuracy: Infinity }
+    const onFix = (pos) => {
+      if (manualLockRef.current) return
+      const next = pointFromPosition(pos)
+      const accuracy = Number.isFinite(next.accuracy) ? next.accuracy : 99999
+      const dist = movedMeters(seen.point, next)
+      const first = !seen.point
+      const sharper = accuracy + 25 < seen.accuracy
+      if (!first && dist < 15 && !sharper) return
+      const fly = first || (seen.accuracy > 250 && accuracy < 80)
+      if (accuracy < seen.accuracy) seen.accuracy = accuracy
+      seen.point = next
+      applyUserPoint(next, { fly })
+    }
+    const onError = (err) => {
+      if (err?.code === 1 && !seen.point) {
         setUserGps(null)
         setLocationDenied(true)
         setMeals([])
         setMealsError('Yakınınızdaki yemekleri görebilmek için konum izni vermelisiniz')
-      },
-      { enableHighAccuracy: true, timeout: 10000 },
-    )
-  }, [fetchMeals])
+      }
+    }
+
+    navigator.geolocation.getCurrentPosition(onFix, onError, GEO_OPTIONS)
+    const watchId = navigator.geolocation.watchPosition(onFix, onError, GEO_OPTIONS)
+    return () => navigator.geolocation.clearWatch(watchId)
+  }, [applyUserPoint])
 
   useEffect(() => {
     if (!user) return undefined
@@ -243,19 +287,14 @@ function App() {
     if (!navigator.geolocation) return
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const next = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-        setUserGps(next)
-        setMapCenter(next)
-        setMapZoom(13)
-        setFlyToTarget({ id: Date.now(), ...next, zoom: 13 })
-        setLocationDenied(false)
-        fetchMeals(next)
+        manualLockRef.current = false
+        applyUserPoint(pointFromPosition(pos), { fly: true })
       },
       () => {
         setLocationDenied(true)
         setMealsError('Yakınınızdaki yemekleri görebilmek için konum izni vermelisiniz')
       },
-      { enableHighAccuracy: true, timeout: 10000 },
+      GEO_OPTIONS,
     )
   }
 
@@ -512,13 +551,17 @@ function App() {
               gpsPosition={userGps}
               mapZoom={mapZoom || 15}
               onPublished={handleSharePublish}
+              onUserPositionChange={(point, meta) => {
+                if (meta?.gps) manualLockRef.current = false
+                applyUserPoint(point, { manual: Boolean(meta?.manual) })
+              }}
             />
           </div>
         ) : (
           <>
             <section className="map-panel animate-fade-in">
               <div className="map-frame">
-                <LocationSearch onSelect={handlePlaceSelect} />
+                <LocationSearch onSelect={handlePlaceSelect} locationLabel={locationLabel} />
                 <MealMap
                   userPosition={mapCenter}
                   gpsPosition={userGps}
@@ -528,6 +571,14 @@ function App() {
                   onSelect={setSelectedId}
                   followCenter={false}
                   flyToTarget={flyToTarget}
+                  onUserPositionChange={(point, meta) => {
+                    if (meta?.gps) manualLockRef.current = false
+                    applyUserPoint(point, { manual: Boolean(meta?.manual) })
+                  }}
+                  onGpsError={() => {
+                    setLocationDenied(true)
+                    setMealsError('Yakınınızdaki yemekleri görebilmek için konum izni vermelisiniz')
+                  }}
                 />
               </div>
             </section>

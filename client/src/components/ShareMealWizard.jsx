@@ -50,6 +50,7 @@ export default function ShareMealWizard({
   mapZoom,
   onPublished,
   onError,
+  onUserPositionChange,
 }) {
   const [step, setStep] = useState(1)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -385,6 +386,7 @@ export default function ShareMealWizard({
                   }}
                   followCenter={false}
                   flyToTarget={flyToTarget}
+                  onUserPositionChange={onUserPositionChange}
                 />
               </div>
               <p className="pick-coords">
