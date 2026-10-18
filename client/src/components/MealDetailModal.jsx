@@ -158,7 +158,7 @@ export default function MealDetailModal({ meal, kindLabel, userLocation, onClose
 
   return (
     <div
-      className="fixed inset-0 z-[1800] flex items-end justify-center p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[1800] flex items-end justify-center md:items-center md:p-4"
       onMouseDown={onClose}
     >
       <div className="absolute inset-0 bg-slate-900/60" />
@@ -166,9 +166,10 @@ export default function MealDetailModal({ meal, kindLabel, userLocation, onClose
         role="dialog"
         aria-modal="true"
         aria-labelledby="meal-detail-title"
-        className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl"
+        className="sheet-panel relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-[32px] bg-white pb-[env(safe-area-inset-bottom,16px)] shadow-2xl md:max-h-[90vh] md:rounded-3xl md:pb-0"
         onMouseDown={(event) => event.stopPropagation()}
       >
+        <div className="sheet-handle md:hidden" aria-hidden />
         <button
           type="button"
           className="absolute right-3 top-3 z-10 grid h-10 w-10 place-items-center rounded-full bg-white text-slate-700 shadow-md"
@@ -228,20 +229,19 @@ export default function MealDetailModal({ meal, kindLabel, userLocation, onClose
               )}
             </div>
             {hasPoint ? (
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="mb-2 hidden md:flex">
                 <button
                   type="button"
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-3.5 py-2 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer"
                   onClick={openDirections}
                 >
                   <Navigation size={15} aria-hidden />
-                  <span className="sm:hidden">Yol Tarifi Al</span>
-                  <span className="hidden sm:inline">Google Haritalar&apos;da Yol Tarifi Al</span>
+                  Google Haritalar&apos;da Yol Tarifi Al
                 </button>
               </div>
             ) : null}
             {hasPoint ? (
-              <div className="relative h-[240px] overflow-hidden rounded-2xl border border-slate-100">
+              <div className="relative h-[210px] overflow-hidden rounded-2xl border border-slate-100 md:h-[240px]">
                 <MapContainer
                   center={[lat, lng]}
                   zoom={15}
@@ -294,7 +294,7 @@ export default function MealDetailModal({ meal, kindLabel, userLocation, onClose
                 </button>
                 <button
                   type="button"
-                  className="absolute bottom-10 right-3 z-[1000] w-9 h-9 bg-white text-slate-700 hover:text-blue-600 rounded-lg shadow-md border border-slate-200 flex items-center justify-center cursor-pointer hover:bg-blue-50 transition-all"
+                  className="absolute bottom-10 right-3 z-[1000] h-10 w-10 bg-white text-slate-700 hover:text-blue-600 rounded-lg shadow-md border border-slate-200 flex items-center justify-center cursor-pointer hover:bg-blue-50 transition-all"
                   onClick={flyToUser}
                   aria-label="Konumuma git"
                 >
@@ -313,7 +313,17 @@ export default function MealDetailModal({ meal, kindLabel, userLocation, onClose
           </div>
         </div>
 
-        <footer className="z-10 flex shrink-0 flex-col gap-3 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <footer className="z-10 flex shrink-0 flex-col gap-3 border-t border-slate-100 bg-white px-5 py-4 md:flex-row md:items-center md:justify-between">
+          {hasPoint && (
+            <button
+              type="button"
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3.5 text-sm font-semibold text-white shadow-md md:hidden"
+              onClick={openDirections}
+            >
+              <Navigation size={16} aria-hidden />
+              Google Haritalar&apos;da Yol Tarifi Al
+            </button>
+          )}
           <div className="text-sm text-slate-600">
             <p>Kapora %{rate}: <strong className="text-slate-900">{deposit.toFixed(2)} ₺</strong></p>
             <p>Kapıda nakit: <strong className="text-slate-900">{cash.toFixed(2)} ₺</strong></p>

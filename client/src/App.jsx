@@ -3,7 +3,10 @@ import axios from 'axios'
 import { io } from 'socket.io-client'
 import {
   ChefHat,
+  Home,
   MapPin,
+  ShoppingBag,
+  User,
   UtensilsCrossed,
   Search,
   X,
@@ -77,7 +80,10 @@ function App() {
   const [locationLabel, setLocationLabel] = useState(KAYSERI_LABEL)
   const [selectedDistrict, setSelectedDistrict] = useState('Melikgazi')
   const [query, setQuery] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [profileSection, setProfileSection] = useState('ozet')
+  const searchRef = useRef(null)
 
   const [meals, setMeals] = useState([])
   const [loadingMeals, setLoadingMeals] = useState(true)
@@ -314,6 +320,27 @@ function App() {
     setReserveMeal(meal)
   }
 
+  const openProfile = (section) => {
+    if (!user) {
+      openAuth('login')
+      return
+    }
+    setProfileSection(section)
+    setProfileOpen(true)
+  }
+
+  const goHome = () => {
+    setActiveTab('search')
+    setProfileOpen(false)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const focusSearch = () => {
+    setActiveTab('search')
+    setProfileOpen(false)
+    window.requestAnimationFrame(() => searchRef.current?.focus())
+  }
+
   const handleShareTab = () => {
     if (!user) {
       openAuth('register', { type: 'share' })
@@ -416,6 +443,17 @@ function App() {
     if (action?.type === 'share') setActiveTab('share')
   }
 
+  const mobileTab =
+    activeTab === 'share'
+      ? 'share'
+      : profileOpen && profileSection === 'siparis'
+        ? 'orders'
+        : profileOpen
+          ? 'profile'
+          : searchFocused
+            ? 'search'
+            : 'home'
+
   const visibleMeals = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase('tr')
     return meals
@@ -454,8 +492,12 @@ function App() {
         <form className="search-bar" role="search" onSubmit={(event) => event.preventDefault()}>
           <Search size={18} aria-hidden />
           <input
+            ref={searchRef}
+            className="text-base md:text-sm"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
             placeholder="Yemek adı, malzeme, tatlı veya aşçı ara... (örn: Mantı, Yağlama)"
             aria-label="Yemek ara"
           />
@@ -478,7 +520,7 @@ function App() {
             <span className="share-plus" aria-hidden>+</span>
           </button>
           {user ? (
-            <button type="button" className="profile-btn" onClick={() => setProfileOpen(true)}>
+            <button type="button" className="profile-btn" onClick={() => openProfile('ozet')}>
               <span className="avatar">{initials(user.adSoyad)}</span>
               <span className="profile-name">{user.adSoyad}</span>
               <span aria-hidden>▾</span>
@@ -579,9 +621,9 @@ function App() {
                       >
                         <div className="relative">
                           {meal.imageUrl ? (
-                            <img className="h-40 w-full object-cover" src={meal.imageUrl} alt="" />
+                            <img className="h-[190px] w-full object-cover md:h-40" src={meal.imageUrl} alt="" />
                           ) : (
-                            <div className="h-40 w-full bg-slate-100" />
+                            <div className="h-[190px] w-full bg-slate-100 md:h-40" />
                           )}
                           <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-slate-700">
                             {kindLabel}
@@ -591,12 +633,12 @@ function App() {
                           </span>
                         </div>
                         <div className="px-4 pb-3 pt-3 text-left">
-                          <h3 className="line-clamp-2 min-h-[2.75rem] text-base font-semibold text-slate-900">{meal.title}</h3>
+                          <h3 className="line-clamp-2 text-base font-semibold text-slate-900 md:min-h-[2.75rem]">{meal.title}</h3>
                           <p className="mt-1 flex flex-wrap items-center gap-1 text-sm font-medium text-slate-600">
                             {meal.chef}
                             <RatingBadge score={meal.chefRating} count={meal.chefReviewCount} />
                           </p>
-                          <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-xs text-slate-500">{meal.description}</p>
+                          <p className="mt-1 line-clamp-2 text-xs text-slate-500 md:min-h-[2.5rem]">{meal.description}</p>
                         </div>
                       </button>
                       <div className="mt-auto flex flex-col gap-2.5 border-t border-slate-100 px-4 pb-4 pt-3">
@@ -630,8 +672,57 @@ function App() {
         )}
       </main>
 
+      <nav className="mobile-tabbar flex md:hidden" aria-label="Mobil menü">
+        {[
+          { id: 'home', label: 'Ana Sayfa', icon: Home, onClick: goHome },
+          { id: 'search', label: 'Ara', icon: Search, onClick: focusSearch },
+        ].map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`mobile-tab ${mobileTab === item.id ? 'is-active' : ''}`}
+            onClick={item.onClick}
+            aria-current={mobileTab === item.id ? 'page' : undefined}
+          >
+            <item.icon size={20} aria-hidden />
+            <span>{item.label}</span>
+          </button>
+        ))}
+        <button
+          type="button"
+          className="mobile-tab mobile-tab-share"
+          onClick={handleShareTab}
+          aria-label="Yemek Paylaş"
+          aria-current={mobileTab === 'share' ? 'page' : undefined}
+        >
+          <span className="mobile-share-fab">
+            <ChefHat size={22} aria-hidden />
+          </span>
+          <span>Paylaş</span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-tab ${mobileTab === 'orders' ? 'is-active' : ''}`}
+          onClick={() => openProfile('siparis')}
+          aria-current={mobileTab === 'orders' ? 'page' : undefined}
+        >
+          <ShoppingBag size={20} aria-hidden />
+          <span>Siparişlerim</span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-tab ${mobileTab === 'profile' ? 'is-active' : ''}`}
+          onClick={() => openProfile('ozet')}
+          aria-current={mobileTab === 'profile' ? 'page' : undefined}
+        >
+          <User size={20} aria-hidden />
+          <span>Profilim</span>
+        </button>
+      </nav>
+
       <ProfileDrawer
         open={profileOpen}
+        initialSection={profileSection}
         user={user}
         api={api}
         onClose={() => setProfileOpen(false)}

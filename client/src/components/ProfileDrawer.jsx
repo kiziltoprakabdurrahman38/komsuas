@@ -39,6 +39,7 @@ function orderLabel(status) {
 
 export default function ProfileDrawer({
   open,
+  initialSection = 'ozet',
   user,
   api,
   onClose,
@@ -74,7 +75,7 @@ export default function ProfileDrawer({
 
   useEffect(() => {
     if (!open) return undefined
-    setSection('ozet')
+    setSection(initialSection || 'ozet')
     const next = splitName(user?.adSoyad)
     setProfile({
       ad: next.ad,
@@ -107,7 +108,7 @@ export default function ProfileDrawer({
     return () => {
       cancelled = true
     }
-  }, [open, user?.id, user?.bakiye])
+  }, [open, initialSection, user?.id, user?.bakiye])
 
   const activeOrders = useMemo(
     () => orders.filter((order) => order.status === 'Beklemede' || order.status === 'Onaylandi'),
@@ -169,6 +170,7 @@ export default function ProfileDrawer({
     <div className="drawer-root">
       <button type="button" className="drawer-backdrop" aria-label="Kapat" onClick={onClose} />
       <aside className="profile-drawer" role="dialog" aria-modal="true" aria-label="Hesabım">
+        <div className="sheet-handle md:hidden" aria-hidden />
         <header className="drawer-head">
           <strong>Hesabım</strong>
           <button type="button" className="icon-x" onClick={onClose} aria-label="Kapat">
