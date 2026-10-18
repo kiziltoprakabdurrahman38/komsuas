@@ -226,4 +226,70 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
   }
 });
 
+router.get('/mine', requireAuth, async (req, res) => {
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input('asciId', sql.Int, req.user.id)
+      .query(`
+        SELECT
+          Id AS id,
+          Baslik AS title,
+          KalanPorsiyon AS portions,
+          AktifMi AS isActive,
+          PorsiyonFiyati AS price,
+          Ilce AS ilce,
+          GorselUrl AS imageUrl
+        FROM dbo.Meals
+        WHERE AsciId = @asciId
+        ORDER BY Id DESC
+      `);
+    res.json({ meals: result.recordset });
+  } catch (err) {
+    res.status(500).json({ error: 'İlanlar getirilemedi.', detail: err.message });
+  }
+});
+
+router.patch('/:id', requireAuth, requireVerified, async (req, res) => {
+  const id = Number(req.params.id);
+  const portions = req.body?.kalanPorsiyon ?? req.body?.portions;
+  const active = req.body?.aktifMi ?? req.body?.isActive;
+  if (!id) return res.status(400).json({ error: 'İlan bulunamadı.' });
+
+  try {
+    const pool = await getPool();
+    const request = pool.request().input('id', sql.Int, id).input('asciId', sql.Int, req.user.id);
+    const sets = [];
+    if (portions != null) {
+      const next = Number(portions);
+      if (!Number.isInteger(next) || next < 0 || next > 200) {
+        return res.status(400).json({ error: 'Porsiyon 0–200 arasında olmalı.' });
+      }
+      request.input('portions', sql.Int, next);
+      sets.push('KalanPorsiyon = @portions');
+      sets.push('AktifMi = CASE WHEN @portions <= 0 THEN 0 ELSE AktifMi END');
+    }
+    if (active != null && portions == null) {
+      request.input('active', sql.Bit, active ? 1 : 0);
+      sets.push('AktifMi = @active');
+    }
+    if (!sets.length) return res.status(400).json({ error: 'Güncellenecek alan yok.' });
+
+    const result = await request.query(`
+      UPDATE dbo.Meals
+      SET ${sets.join(', ')}
+      OUTPUT INSERTED.Id AS id, INSERTED.KalanPorsiyon AS portions, INSERTED.AktifMi AS isActive
+      WHERE Id = @id AND AsciId = @asciId
+    `);
+    if (!result.recordset.length) {
+      return res.status(404).json({ error: 'İlan bulunamadı.' });
+    }
+    emitMealsChanged({ reason: 'updated', mealId: id });
+    res.json({ meal: result.recordset[0], message: 'İlan güncellendi.' });
+  } catch (err) {
+    res.status(500).json({ error: 'İlan güncellenemedi.', detail: err.message });
+  }
+});
+
 module.exports = router;

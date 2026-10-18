@@ -29,6 +29,8 @@ function mapUser(row) {
     verified: Boolean(row.isVerified),
     ortalamaPuan: row.ortalamaPuan == null ? 5 : Number(row.ortalamaPuan),
     toplamDegerlendirme: Number(row.toplamDegerlendirme ?? 0),
+    email: row.email || null,
+    bolge: row.bolge || null,
   };
 }
 
@@ -45,6 +47,8 @@ const USER_SELECT = `
     IsVerified AS isVerified,
     OrtalamaPuan AS ortalamaPuan,
     ToplamDegerlendirme AS toplamDegerlendirme,
+    Email AS email,
+    Bolge AS bolge,
     SifreHash AS sifreHash
   FROM dbo.Users
 `;
@@ -380,6 +384,108 @@ router.get('/me', requireAuth, async (req, res) => {
     res.json({ user: mapUser(result.recordset[0]) });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/profile', requireAuth, async (req, res) => {
+  try {
+    const ad = String(req.body?.ad || '').trim();
+    const soyad = String(req.body?.soyad || '').trim();
+    const adSoyad = `${ad} ${soyad}`.trim().replace(/\s+/g, ' ');
+    const telefon = String(req.body?.telefon || '').trim();
+    const email = String(req.body?.email || '').trim();
+    const bolge = String(req.body?.bolge || '').trim();
+
+    if (adSoyad.length < 3) {
+      return res.status(400).json({ error: 'Ad ve soyad gerekli.' });
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'E-posta formatı geçersiz.' });
+    }
+
+    const pool = await getPool();
+    if (telefon) {
+      const clash = await pool
+        .request()
+        .input('telefon', sql.NVarChar(20), telefon)
+        .input('id', sql.Int, req.user.id)
+        .query(`
+          SELECT Id FROM dbo.Users
+          WHERE Telefon = @telefon AND Id <> @id
+        `);
+      if (clash.recordset.length) {
+        return res.status(409).json({ error: 'Bu telefon başka bir hesapta kayıtlı.' });
+      }
+    }
+
+    await pool
+      .request()
+      .input('id', sql.Int, req.user.id)
+      .input('adSoyad', sql.NVarChar(100), adSoyad)
+      .input('ad', sql.NVarChar(120), adSoyad)
+      .input('telefon', sql.NVarChar(20), telefon || null)
+      .input('email', sql.NVarChar(120), email || null)
+      .input('bolge', sql.NVarChar(80), bolge || null)
+      .query(`
+        UPDATE dbo.Users
+        SET
+          AdSoyad = @adSoyad,
+          Ad = @ad,
+          Telefon = @telefon,
+          Email = @email,
+          Bolge = @bolge
+        WHERE Id = @id
+      `);
+
+    const refreshed = await pool
+      .request()
+      .input('id', sql.Int, req.user.id)
+      .query(`${USER_SELECT} WHERE Id = @id`);
+
+    res.json({ message: 'Profil güncellendi.', user: mapUser(refreshed.recordset[0]) });
+  } catch (err) {
+    console.error('PATCH /api/auth/profile', err);
+    res.status(500).json({ error: 'Profil güncellenemedi.', detail: err.message });
+  }
+});
+
+router.post('/password', requireAuth, async (req, res) => {
+  try {
+    const current = String(req.body?.currentPassword || req.body?.mevcutSifre || '');
+    const next = String(req.body?.newPassword || req.body?.yeniSifre || '');
+    const again = String(req.body?.confirmPassword || req.body?.yeniSifreTekrar || '');
+
+    if (!current || !next) {
+      return res.status(400).json({ error: 'Mevcut şifre ve yeni şifre gerekli.' });
+    }
+    if (next.length < 4) {
+      return res.status(400).json({ error: 'Yeni şifre en az 4 karakter olmalı.' });
+    }
+    if (next !== again) {
+      return res.status(400).json({ error: 'Yeni şifre tekrarı eşleşmiyor.' });
+    }
+
+    const pool = await getPool();
+    const found = await pool
+      .request()
+      .input('id', sql.Int, req.user.id)
+      .query(`${USER_SELECT} WHERE Id = @id`);
+    const row = found.recordset[0];
+    if (!row) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+    if (!verifyPassword(current, row.sifreHash)) {
+      return res.status(401).json({ error: 'Mevcut şifre hatalı.' });
+    }
+
+    await pool
+      .request()
+      .input('id', sql.Int, req.user.id)
+      .input('hash', sql.Char(64), hashPassword(next))
+      .query(`UPDATE dbo.Users SET SifreHash = @hash WHERE Id = @id`);
+
+    res.json({ message: 'Şifre güncellendi.' });
+  } catch (err) {
+    console.error('POST /api/auth/password', err);
+    res.status(500).json({ error: 'Şifre güncellenemedi.', detail: err.message });
   }
 });
 

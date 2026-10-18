@@ -1,26 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { io } from 'socket.io-client'
 import {
   MapPin,
   UtensilsCrossed,
   Search,
-  ChefHat,
-  BadgeCheck,
-  LogOut,
-  Wallet,
-  ClipboardList,
+  Plus,
+  X,
 } from 'lucide-react'
 import AuthModal from './components/AuthModal.jsx'
 import Toast from './components/Toast.jsx'
 import OtpModal from './components/OtpModal.jsx'
 import WalletTopupModal from './components/WalletTopupModal.jsx'
 import ReserveModal from './components/ReserveModal.jsx'
-import OrdersPanel from './components/OrdersPanel.jsx'
 import BrandLogo from './components/BrandLogo.jsx'
 import ShareMealWizard from './components/ShareMealWizard.jsx'
 import ReviewModal from './components/ReviewModal.jsx'
 import RatingBadge from './components/RatingBadge.jsx'
+import ProfileDrawer, { initials } from './components/ProfileDrawer.jsx'
 import { apiBaseUrl, apiOrigin } from './apiConfig.js'
 import {
   GEO_OPTIONS,
@@ -32,8 +29,8 @@ import { fallbackMealsNear, mealKind } from './fallbackMeals.js'
 
 const MEAL_FILTERS = [
   { id: 'all', label: 'Tümü' },
-  { id: 'ana', label: 'Ana yemek' },
-  { id: 'hamur', label: 'Hamur işi' },
+  { id: 'ana', label: 'Ana Yemek' },
+  { id: 'hamur', label: 'Hamur İşi' },
   { id: 'corba', label: 'Çorba' },
   { id: 'tatli', label: 'Tatlı' },
 ]
@@ -56,6 +53,8 @@ const KAYSERI_NEIGHBORHOODS = [
   { id: 'yenidogan', label: 'Yenidoğan', lat: 38.7488, lng: 35.4562 },
   { id: 'erkilet', label: 'Erkilet', lat: 38.7412, lng: 35.4286 },
 ]
+
+const KAYSERI_PLACES = [...KAYSERI_DISTRICTS, ...KAYSERI_NEIGHBORHOODS]
 
 const AUTH_STORAGE_KEY = 'evyemegi_auth'
 const api = axios.create({ baseURL: apiBaseUrl })
@@ -93,6 +92,10 @@ function App() {
   const [userGps, setUserGps] = useState(KAYSERI_DEFAULT)
   const [locationLabel, setLocationLabel] = useState(KAYSERI_LABEL)
   const [selectedPlace, setSelectedPlace] = useState('melikgazi')
+  const [locationOpen, setLocationOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [profileOpen, setProfileOpen] = useState(false)
+  const locationRef = useRef(null)
 
   const [meals, setMeals] = useState([])
   const [loadingMeals, setLoadingMeals] = useState(true)
@@ -430,114 +433,118 @@ function App() {
     if (action?.type === 'share') setActiveTab('share')
   }
 
-  const visibleMeals = meals
-    .filter((meal) => mealFilter === 'all' || mealKind(meal) === mealFilter)
-    .slice()
-    .sort((a, b) => Number(a.distanceKm) - Number(b.distanceKm))
+  useEffect(() => {
+    if (!locationOpen) return undefined
+    const close = (event) => {
+      if (!locationRef.current?.contains(event.target)) setLocationOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [locationOpen])
+
+  const visibleMeals = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase('tr')
+    return meals
+      .filter((meal) => mealFilter === 'all' || mealKind(meal) === mealFilter)
+      .filter((meal) => {
+        if (!needle) return true
+        const kindLabel = MEAL_FILTERS.find((item) => item.id === mealKind(meal))?.label || ''
+        const haystack = [meal.title, meal.description, meal.chef, kindLabel, meal.ilce, meal.mahalle]
+          .filter(Boolean)
+          .join(' ')
+          .toLocaleLowerCase('tr')
+        return haystack.includes(needle)
+      })
+      .sort((a, b) => Number(a.distanceKm) - Number(b.distanceKm))
+  }, [meals, mealFilter, query])
+
+  const matchedPlace = KAYSERI_PLACES.find((place) => (locationLabel || '').includes(place.label))
+  const headerPlace = `Kayseri, ${
+    KAYSERI_PLACES.find((place) => place.id === selectedPlace)?.label
+    || matchedPlace?.label
+    || 'Melikgazi'
+  }`
 
   return (
     <div className="app-shell">
-      <header className="site-header animate-fade-down">
-        <button
-          type="button"
-          className="brand-block brand-hit"
-          onClick={() => setActiveTab('search')}
-          aria-label="KomşuAş ana sayfa"
-        >
-          <BrandLogo size={48} />
-          <div className="brand-text">
-            <p className="brand-mark">KomşuAş</p>
-            <p className="brand-sub">Kapıdan Sıcak Ev Yemeği</p>
-          </div>
-        </button>
-
-        <div className="header-cluster">
-          <nav className="tab-nav" aria-label="Ana sekmeler">
-            <button
-              type="button"
-              className={`tab-btn ${activeTab === 'share' ? 'is-active' : ''}`}
-              onClick={handleShareTab}
-            >
-              <ChefHat size={18} aria-hidden />
-              <span className="tab-label-full">Aşçı mısın? Yemek Paylaş</span>
-              <span className="tab-label-short">Paylaş</span>
-            </button>
-            <button
-              type="button"
-              className={`tab-btn ${activeTab === 'search' ? 'is-active' : ''}`}
-              onClick={() => setActiveTab('search')}
-            >
-              <Search size={18} aria-hidden />
-              <span className="tab-label-full">Yemek Ara</span>
-              <span className="tab-label-short">Ara</span>
-            </button>
-            {user && (
-              <button
-                type="button"
-                className={`tab-btn ${activeTab === 'orders' ? 'is-active' : ''}`}
-                onClick={() => {
-                  if (!ensureVerified()) return
-                  setActiveTab('orders')
-                  setOrdersKey((k) => k + 1)
-                }}
-              >
-                <ClipboardList size={18} aria-hidden />
-                <span className="tab-label-full">Siparişlerim & İlanlarım</span>
-                <span className="tab-label-short">Sipariş</span>
-              </button>
-            )}
-          </nav>
-
-          <div className="header-actions">
-          {user ? (
-            <div className="user-chip">
-              <div className="user-chip-text">
-                <strong>{user.adSoyad}</strong>
-                <span className={`verified-badge ${user.isVerified ? '' : 'is-pending'}`}>
-                  <BadgeCheck size={14} aria-hidden />
-                  {user.isVerified ? 'Doğrulanmış Profil' : 'Doğrulama bekliyor'}
-                </span>
-                <RatingBadge score={user.ortalamaPuan} count={user.toplamDegerlendirme} />
-              </div>
-              <button type="button" className="wallet-chip" onClick={() => {
-                if (!ensureVerified()) return
-                setWalletOpen(true)
-              }}>
-                <Wallet size={15} aria-hidden />
-                <span className="tab-label-full">Cüzdan: {Number(user.bakiye ?? 0).toFixed(0)} ₺</span>
-                <span className="tab-label-short">{Number(user.bakiye ?? 0).toFixed(0)} ₺</span>
-              </button>
-              <button
-                type="button"
-                className="logout-btn"
-                onClick={() => {
-                  if (!ensureVerified()) return
-                  setWalletOpen(true)
-                }}
-              >
-                <span className="topup-label">+ Bakiye</span>
-              </button>
-              <button
-                type="button"
-                className="logout-btn"
-                onClick={() => {
-                  persistAuth(null)
-                  setDeliveryInfo(null)
-                  setActiveTab('search')
-                }}
-                aria-label="Çıkış Yap"
-              >
-                <LogOut size={16} aria-hidden />
-                <span className="logout-label">Çıkış</span>
-              </button>
+      <header className="site-header market-header animate-fade-down">
+        <div className="header-brand">
+          <button
+            type="button"
+            className="brand-block brand-hit"
+            onClick={() => setActiveTab('search')}
+            aria-label="KomşuAş ana sayfa"
+          >
+            <BrandLogo size={44} />
+            <div className="brand-text">
+              <p className="brand-mark">KomşuAş</p>
+              <p className="brand-sub">Kapıdan Sıcak Ev Yemeği</p>
             </div>
-          ) : (
-            <button type="button" className="auth-trigger" onClick={() => openAuth('login')}>
-              <span className="tab-label-full">Giriş Yap</span>
-              <span className="tab-label-short">Giriş</span>
+          </button>
+          <div className="loc-wrap" ref={locationRef}>
+            <button
+              type="button"
+              className="loc-chip"
+              onClick={() => setLocationOpen((open) => !open)}
+              aria-expanded={locationOpen}
+            >
+              <MapPin size={15} aria-hidden />
+              {headerPlace}
+              <span aria-hidden>▾</span>
+            </button>
+            {locationOpen && (
+              <div className="loc-popover" role="listbox" aria-label="Konum seç">
+                {KAYSERI_PLACES.map((place) => (
+                  <button
+                    key={place.id}
+                    type="button"
+                    role="option"
+                    aria-selected={selectedPlace === place.id}
+                    className={selectedPlace === place.id ? 'is-active' : ''}
+                    onClick={() => {
+                      choosePlace(place)
+                      setLocationOpen(false)
+                    }}
+                  >
+                    {place.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <form className="search-bar" role="search" onSubmit={(event) => event.preventDefault()}>
+          <Search size={18} aria-hidden />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Yemek adı, malzeme, tatlı veya aşçı ara... (örn: Mantı, Yağlama)"
+            aria-label="Yemek ara"
+          />
+          {query && (
+            <button type="button" className="icon-x" onClick={() => setQuery('')} aria-label="Aramayı temizle">
+              <X size={16} />
             </button>
           )}
-          </div>
+        </form>
+
+        <div className="header-actions">
+          <button type="button" className="share-cta" onClick={handleShareTab}>
+            <Plus size={16} aria-hidden />
+            <span className="share-label">Aşçı Ol / Yemek Paylaş</span>
+          </button>
+          {user ? (
+            <button type="button" className="profile-btn" onClick={() => setProfileOpen(true)}>
+              <span className="avatar">{initials(user.adSoyad)}</span>
+              <span className="profile-name">{user.adSoyad}</span>
+              <span aria-hidden>▾</span>
+            </button>
+          ) : (
+            <button type="button" className="auth-trigger" onClick={() => openAuth('login')}>
+              Giriş Yap / Kayıt Ol
+            </button>
+          )}
         </div>
       </header>
 
@@ -550,58 +557,8 @@ function App() {
         </div>
       )}
 
-      {activeTab === 'search' && (
-        <div className="place-bar">
-          <p className="place-bar-label">
-            <MapPin size={15} aria-hidden />
-            {locationLabel || KAYSERI_LABEL}
-          </p>
-          <div className="place-chips" role="listbox" aria-label="İlçe">
-            {KAYSERI_DISTRICTS.map((place) => (
-              <button
-                key={place.id}
-                type="button"
-                role="option"
-                aria-selected={selectedPlace === place.id}
-                className={`place-chip ${selectedPlace === place.id ? 'is-active' : ''}`}
-                onClick={() => choosePlace(place)}
-              >
-                {place.label}
-              </button>
-            ))}
-          </div>
-          <div className="place-chips" role="listbox" aria-label="Mahalle">
-            {KAYSERI_NEIGHBORHOODS.map((place) => (
-              <button
-                key={place.id}
-                type="button"
-                role="option"
-                aria-selected={selectedPlace === place.id}
-                className={`place-chip ${selectedPlace === place.id ? 'is-active' : ''}`}
-                onClick={() => choosePlace(place)}
-              >
-                {place.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       <main className="main-stage">
-        {activeTab === 'orders' ? (
-          <OrdersPanel
-            key={ordersKey}
-            api={api}
-            onNotify={(payload) => setToast(payload)}
-            onReview={(order) =>
-              setReviewOrder({
-                orderId: order.id,
-                mealTitle: order.mealTitle,
-                aliciId: user?.id,
-              })
-            }
-          />
-        ) : activeTab === 'share' ? (
+        {activeTab === 'share' ? (
           <div className="share-layout">
             <ShareMealWizard
               userName={user?.adSoyad}
@@ -617,17 +574,6 @@ function App() {
           </div>
         ) : (
           <section className="meals-panel">
-              <div className="meals-heading animate-fade-in">
-                <h2>Yakınındaki sofralar</h2>
-                <p>
-                  {loadingMeals
-                    ? 'Yemekler yükleniyor…'
-                    : usingFallback
-                      ? `${visibleMeals.length} örnek ilan`
-                      : `${visibleMeals.length} aktif ilan`}
-                </p>
-              </div>
-
               <div className="meal-filters" role="tablist" aria-label="Yemek türü">
                 {MEAL_FILTERS.map((filter) => (
                   <button
@@ -641,13 +587,30 @@ function App() {
                 ))}
               </div>
 
+              <div className="meals-heading animate-fade-in">
+                <h2>Yakınınızdaki Ev Yemekleri</h2>
+                <p>
+                  {loadingMeals
+                    ? 'Yemekler yükleniyor…'
+                    : `${visibleMeals.length} aktif ilan`}
+                </p>
+              </div>
+
               {usingFallback && (
                 <p className="meal-fallback-note">
                   Örnek Kayseri vitrini gösteriliyor. Canlı liste bağlanınca kendiliğinden güncellenir.
                 </p>
               )}
               {mealsError && <p className="form-feedback is-error">{mealsError}</p>}
-              {!loadingMeals && !mealsError && visibleMeals.length === 0 && (
+              {!loadingMeals && visibleMeals.length === 0 && query.trim() && (
+                <div className="empty-card">
+                  <p>Aradığınız yemek bulunamadı</p>
+                  <button type="button" className="share-cta" onClick={() => setQuery('')}>
+                    Aramayı Temizle
+                  </button>
+                </div>
+              )}
+              {!loadingMeals && !mealsError && visibleMeals.length === 0 && !query.trim() && (
                 <p className="empty-state">Bu türde yakın ilan yok.</p>
               )}
 
@@ -703,6 +666,36 @@ function App() {
             </section>
         )}
       </main>
+
+      <ProfileDrawer
+        open={profileOpen}
+        user={user}
+        api={api}
+        onClose={() => setProfileOpen(false)}
+        onTopup={() => {
+          if (!ensureVerified()) return
+          setWalletOpen(true)
+        }}
+        onLogout={() => {
+          persistAuth(null)
+          setDeliveryInfo(null)
+          setProfileOpen(false)
+          setActiveTab('search')
+        }}
+        onUserSaved={(nextUser) => patchUser(nextUser)}
+        onReview={(order) => {
+          setProfileOpen(false)
+          setReviewOrder({
+            orderId: order.id,
+            mealTitle: order.mealTitle,
+            aliciId: user?.id,
+          })
+        }}
+        onNotify={(payload) => setToast(payload)}
+        onMealsChanged={() => {
+          if (userGps) fetchMeals(userGps)
+        }}
+      />
 
       <AuthModal
         open={authOpen}

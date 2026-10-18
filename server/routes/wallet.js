@@ -105,4 +105,27 @@ router.post('/topup', requireAuth, requireVerified, async (req, res) => {
   }
 });
 
+router.get('/transactions', requireAuth, async (req, res) => {
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input('id', sql.Int, req.user.id)
+      .query(`
+        SELECT TOP 8
+          Id AS id,
+          Tutar AS amount,
+          IslemTipi AS type,
+          Aciklama AS note,
+          Tarih AS createdAt
+        FROM dbo.WalletTransactions
+        WHERE UserId = @id
+        ORDER BY Id DESC
+      `);
+    res.json({ transactions: result.recordset });
+  } catch (err) {
+    res.status(500).json({ error: 'Cüzdan hareketleri getirilemedi.', detail: err.message });
+  }
+});
+
 module.exports = router;

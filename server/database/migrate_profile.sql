@@ -1,0 +1,11 @@
+IF COL_LENGTH(N'dbo.Users', N'Email') IS NULL
+BEGIN
+    ALTER TABLE dbo.Users ADD Email NVARCHAR(120) NULL;
+END
+GO
+
+IF COL_LENGTH(N'dbo.Users', N'Bolge') IS NULL
+BEGIN
+    ALTER TABLE dbo.Users ADD Bolge NVARCHAR(80) NULL;
+END
+GO

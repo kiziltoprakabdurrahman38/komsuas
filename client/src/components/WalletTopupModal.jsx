@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-const AMOUNTS = [50, 100, 200, 500]
+const AMOUNTS = [50, 100, 250, 500]
 
 function formatCardNumber(digits) {
   return digits.replace(/(.{4})/g, '$1 ').trim()
