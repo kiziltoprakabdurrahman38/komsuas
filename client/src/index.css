@@ -48,7 +48,7 @@ button {
 
 .app-shell {
   width: 100%;
-  max-width: 1440px;
+  max-width: 80rem;
   margin: 0 auto;
   padding: 1.5rem 1.5rem 3rem;
 }
@@ -271,16 +271,10 @@ button {
   color: #fff;
 }
 
-.map-fab {
-  display: none;
-}
-
 .main-stage {
-  display: grid;
-  grid-template-columns: minmax(420px, 0.92fr) minmax(0, 1.2fr);
-  gap: 1.5rem;
+  display: block;
+  width: 100%;
   margin-top: 1rem;
-  align-items: start;
 }
 
 .map-panel {
@@ -529,19 +523,26 @@ button {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
-@container (max-width: 560px) {
+@media (min-width: 640px) {
   .meal-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@container (min-width: 920px) {
+@media (min-width: 768px) {
   .meal-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .meal-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -562,6 +563,14 @@ button {
   border-color: rgba(15, 76, 69, 0.35);
   transform: translateY(-3px);
   box-shadow: 0 16px 36px rgba(20, 32, 28, 0.12);
+}
+
+.distance-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--brand);
+  font-weight: 700;
 }
 
 .meal-card-hit {
@@ -1930,11 +1939,7 @@ button {
   }
 
   .main-stage {
-    grid-template-columns: 1fr;
-  }
-
-  .meal-grid {
-    grid-template-columns: 1fr;
+    width: 100%;
   }
 
   .form-row {
@@ -1944,7 +1949,7 @@ button {
 
 @media (max-width: 767px) {
   .app-shell {
-    padding-bottom: 5.5rem;
+    padding-bottom: 2rem;
   }
 
   .site-header {
@@ -2030,42 +2035,6 @@ button {
     padding: 0.42rem 0.55rem;
     border-radius: 999px;
     font-size: 0.78rem;
-  }
-
-  .map-panel {
-    display: none;
-  }
-
-  .map-panel.is-sheet {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 40;
-    margin: 0;
-    background: #fff;
-  }
-
-  .map-panel.is-sheet .map-frame {
-    height: 100dvh;
-    min-height: 100dvh;
-    border-radius: 0;
-  }
-
-  .map-fab {
-    display: inline-flex;
-    position: fixed;
-    right: 1rem;
-    bottom: calc(1rem + env(safe-area-inset-bottom));
-    z-index: 60;
-    align-items: center;
-    border: 0;
-    border-radius: 999px;
-    padding: 0.85rem 1.05rem;
-    background: var(--brand-deep);
-    color: #fff;
-    font-weight: 700;
-    box-shadow: 0 14px 30px rgba(10, 51, 46, 0.32);
-    cursor: pointer;
   }
 }
 

@@ -11,13 +11,11 @@ import {
   Wallet,
   ClipboardList,
 } from 'lucide-react'
-import MealMap from './components/MealMap.jsx'
 import AuthModal from './components/AuthModal.jsx'
 import Toast from './components/Toast.jsx'
 import OtpModal from './components/OtpModal.jsx'
 import WalletTopupModal from './components/WalletTopupModal.jsx'
 import ReserveModal from './components/ReserveModal.jsx'
-import LocationSearch from './components/LocationSearch.jsx'
 import OrdersPanel from './components/OrdersPanel.jsx'
 import BrandLogo from './components/BrandLogo.jsx'
 import ShareMealWizard from './components/ShareMealWizard.jsx'
@@ -95,7 +93,6 @@ function App() {
   const [userGps, setUserGps] = useState(KAYSERI_DEFAULT)
   const [locationLabel, setLocationLabel] = useState(KAYSERI_LABEL)
   const [selectedPlace, setSelectedPlace] = useState('melikgazi')
-  const [mobileMapOpen, setMobileMapOpen] = useState(false)
 
   const [meals, setMeals] = useState([])
   const [loadingMeals, setLoadingMeals] = useState(true)
@@ -299,24 +296,10 @@ function App() {
     return () => socket.disconnect()
   }, [user?.id, userGps, fetchMeals])
 
-  const handlePlaceSelect = (place) => {
-    // Harita aranan noktaya uçar; yemek listesi canlı GPS + 30 km ile kalır
-    setMapCenter({ lat: place.lat, lng: place.lng })
-    setMapZoom(place.zoom || 15)
-    setFlyToTarget({
-      id: Date.now(),
-      lat: place.lat,
-      lng: place.lng,
-      zoom: place.zoom || 15,
-    })
-    if (userGps) fetchMeals(userGps)
-  }
-
   const choosePlace = (place) => {
     applyUserPoint(
       { lat: place.lat, lng: place.lng },
       {
-        fly: true,
         manual: true,
         zoom: 15,
         label: `${place.label}, Kayseri`,
@@ -447,9 +430,10 @@ function App() {
     if (action?.type === 'share') setActiveTab('share')
   }
 
-  const visibleMeals = meals.filter(
-    (meal) => mealFilter === 'all' || mealKind(meal) === mealFilter,
-  )
+  const visibleMeals = meals
+    .filter((meal) => mealFilter === 'all' || mealKind(meal) === mealFilter)
+    .slice()
+    .sort((a, b) => Number(a.distanceKm) - Number(b.distanceKm))
 
   return (
     <div className="app-shell">
@@ -481,10 +465,7 @@ function App() {
             <button
               type="button"
               className={`tab-btn ${activeTab === 'search' ? 'is-active' : ''}`}
-              onClick={() => {
-                setMobileMapOpen(false)
-                setActiveTab('search')
-              }}
+              onClick={() => setActiveTab('search')}
             >
               <Search size={18} aria-hidden />
               <span className="tab-label-full">Yemek Ara</span>
@@ -496,7 +477,6 @@ function App() {
                 className={`tab-btn ${activeTab === 'orders' ? 'is-active' : ''}`}
                 onClick={() => {
                   if (!ensureVerified()) return
-                  setMobileMapOpen(false)
                   setActiveTab('orders')
                   setOrdersKey((k) => k + 1)
                 }}
@@ -636,33 +616,7 @@ function App() {
             />
           </div>
         ) : (
-          <>
-            <section className={`map-panel animate-fade-in ${mobileMapOpen ? 'is-sheet' : ''}`}>
-              <div className="map-frame">
-                <LocationSearch onSelect={handlePlaceSelect} locationLabel={locationLabel} />
-                <MealMap
-                  userPosition={mapCenter}
-                  gpsPosition={userGps}
-                  zoom={mapZoom}
-                  meals={meals}
-                  selectedId={selectedId}
-                  onSelect={setSelectedId}
-                  followCenter={false}
-                  flyToTarget={flyToTarget}
-                  layoutTick={mobileMapOpen ? 1 : 0}
-                  onUserPositionChange={(point, meta) => {
-                    if (meta?.gps) {
-                      manualLockRef.current = false
-                      applyUserPoint(point, { manual: false, fly: true })
-                    } else {
-                      applyUserPoint(point, { manual: Boolean(meta?.manual) })
-                    }
-                  }}
-                />
-              </div>
-            </section>
-
-            <section className="meals-panel">
+          <section className="meals-panel">
               <div className="meals-heading animate-fade-in">
                 <h2>Yakınındaki sofralar</h2>
                 <p>
@@ -727,9 +681,10 @@ function App() {
                           <UtensilsCrossed size={14} aria-hidden />
                           {meal.portions} porsiyon
                         </span>
-                        <span>
+                        <span className="distance-badge">
                           <MapPin size={14} aria-hidden />
                           {Number(meal.distanceKm).toFixed(1)} km
+                          {meal.ilce ? ` • ${meal.ilce}` : ''}
                         </span>
                         <span>Kapora %{meal.depositRate ?? 30}</span>
                       </div>
@@ -746,19 +701,8 @@ function App() {
                 ))}
               </ul>
             </section>
-          </>
         )}
       </main>
-
-      {activeTab === 'search' && (
-        <button
-          type="button"
-          className="map-fab"
-          onClick={() => setMobileMapOpen((open) => !open)}
-        >
-          {mobileMapOpen ? '📋 Listeye Dön' : '🗺️ Haritada Gör'}
-        </button>
-      )}
 
       <AuthModal
         open={authOpen}
