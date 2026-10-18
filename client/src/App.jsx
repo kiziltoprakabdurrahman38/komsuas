@@ -24,9 +24,10 @@ import ShareMealWizard from './components/ShareMealWizard.jsx'
 import ReviewModal from './components/ReviewModal.jsx'
 import RatingBadge from './components/RatingBadge.jsx'
 import { TURKEY_CENTER } from './data/cities.js'
+import { apiBaseUrl, apiOrigin } from './apiConfig.js'
 
 const AUTH_STORAGE_KEY = 'evyemegi_auth'
-const api = axios.create({ baseURL: '/api' })
+const api = axios.create({ baseURL: apiBaseUrl })
 
 api.interceptors.request.use((config) => {
   try {
@@ -180,7 +181,9 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const socket = io('/', { path: '/socket.io', transports: ['websocket', 'polling'] })
+    const socket = apiOrigin
+      ? io(apiOrigin, { path: '/socket.io', transports: ['websocket', 'polling'] })
+      : io({ path: '/socket.io', transports: ['websocket', 'polling'] })
 
     socket.on('wallet:update', (payload) => {
       if (user && Number(payload.userId) === Number(user.id)) {

@@ -14,15 +14,40 @@ const reviewsRouter = require('./routes/reviews');
 const app = express();
 const server = http.createServer(app);
 
+const allowedOrigins = new Set(
+  [
+    'http://localhost:5173',
+    'https://komsuas.vercel.app',
+    process.env.CLIENT_URL,
+  ].filter(Boolean),
+);
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (allowedOrigins.has(origin)) return true;
+  try {
+    const host = new URL(origin).hostname;
+    return host === 'localhost' || host.endsWith('.vercel.app');
+  } catch {
+    return false;
+  }
+}
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      callback(null, isAllowedOrigin(origin));
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   },
 });
 initSocket(io);
 
-app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173' }));
+app.use(cors({
+  origin(origin, callback) {
+    callback(null, isAllowedOrigin(origin));
+  },
+}));
 app.use(express.json({ limit: '8mb' }));
 
 app.get('/api/health', async (_req, res) => {
