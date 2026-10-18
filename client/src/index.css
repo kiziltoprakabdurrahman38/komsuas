@@ -70,12 +70,22 @@ button {
   border-bottom: 1px solid var(--line);
 }
 
-.header-right {
+.header-cluster {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 0.75rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.tab-label-short {
+  display: none;
 }
 
 .auth-trigger {
@@ -214,11 +224,62 @@ button {
   color: #fff;
 }
 
+.place-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.9rem;
+}
+
+.place-bar-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.place-chips {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.15rem;
+  scrollbar-width: none;
+}
+
+.place-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.place-chip {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.42rem 0.8rem;
+  background: #fff;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.place-chip.is-active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.map-fab {
+  display: none;
+}
+
 .main-stage {
   display: grid;
   grid-template-columns: minmax(420px, 0.92fr) minmax(0, 1.2fr);
   gap: 1.5rem;
-  margin-top: 1.5rem;
+  margin-top: 1rem;
   align-items: start;
 }
 
@@ -1872,22 +1933,139 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .map-panel {
-    position: relative;
-    top: auto;
-  }
-
-  .map-frame {
-    height: 48vh;
-    min-height: 320px;
-  }
-
   .meal-grid {
     grid-template-columns: 1fr;
   }
 
   .form-row {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .app-shell {
+    padding-bottom: 5.5rem;
+  }
+
+  .site-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand actions"
+      "nav nav";
+    align-items: center;
+    gap: 0.55rem 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .header-cluster {
+    display: contents;
+  }
+
+  .brand-hit {
+    grid-area: brand;
+    min-width: 0;
+  }
+
+  .brand-logo {
+    width: 36px;
+    height: 36px;
+  }
+
+  .brand-mark {
+    font-size: 1.45rem;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+
+  .header-actions {
+    grid-area: actions;
+  }
+
+  .tab-nav {
+    grid-area: nav;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    width: 100%;
+    gap: 0.35rem;
+  }
+
+  .tab-btn {
+    justify-content: center;
+    padding: 0.48rem 0.4rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+  }
+
+  .tab-label-full {
+    display: none;
+  }
+
+  .tab-label-short {
+    display: inline;
+  }
+
+  .auth-trigger {
+    padding: 0.48rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+  }
+
+  .user-chip {
+    gap: 0.35rem;
+    padding: 0.2rem;
+    border: 0;
+    background: transparent;
+  }
+
+  .user-chip-text,
+  .logout-label {
+    display: none;
+  }
+
+  .wallet-chip,
+  .logout-btn {
+    padding: 0.42rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+  }
+
+  .map-panel {
+    display: none;
+  }
+
+  .map-panel.is-sheet {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    margin: 0;
+    background: #fff;
+  }
+
+  .map-panel.is-sheet .map-frame {
+    height: 100dvh;
+    min-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .map-fab {
+    display: inline-flex;
+    position: fixed;
+    right: 1rem;
+    bottom: calc(1rem + env(safe-area-inset-bottom));
+    z-index: 60;
+    align-items: center;
+    border: 0;
+    border-radius: 999px;
+    padding: 0.85rem 1.05rem;
+    background: var(--brand-deep);
+    color: #fff;
+    font-weight: 700;
+    box-shadow: 0 14px 30px rgba(10, 51, 46, 0.32);
+    cursor: pointer;
   }
 }
 

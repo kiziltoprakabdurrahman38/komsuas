@@ -23,7 +23,6 @@ import BrandLogo from './components/BrandLogo.jsx'
 import ShareMealWizard from './components/ShareMealWizard.jsx'
 import ReviewModal from './components/ReviewModal.jsx'
 import RatingBadge from './components/RatingBadge.jsx'
-import { TURKEY_CENTER } from './data/cities.js'
 import { apiBaseUrl, apiOrigin } from './apiConfig.js'
 import {
   GEO_OPTIONS,
@@ -39,6 +38,25 @@ const MEAL_FILTERS = [
   { id: 'hamur', label: 'Hamur işi' },
   { id: 'corba', label: 'Çorba' },
   { id: 'tatli', label: 'Tatlı' },
+]
+
+const KAYSERI_DEFAULT = { lat: 38.7205, lng: 35.4826 }
+const KAYSERI_LABEL = 'Melikgazi, Kayseri'
+
+const KAYSERI_DISTRICTS = [
+  { id: 'melikgazi', label: 'Melikgazi', lat: 38.7205, lng: 35.4826 },
+  { id: 'talas', label: 'Talas', lat: 38.6892, lng: 35.5464 },
+  { id: 'kocasinan', label: 'Kocasinan', lat: 38.7462, lng: 35.4528 },
+]
+
+const KAYSERI_NEIGHBORHOODS = [
+  { id: 'kicikapi', label: 'Kıçıkapı', lat: 38.7205, lng: 35.4882 },
+  { id: 'sahabiye', label: 'Sahabiye', lat: 38.7264, lng: 35.4908 },
+  { id: 'alpaslan', label: 'Alpaslan', lat: 38.7312, lng: 35.4786 },
+  { id: 'mevlana', label: 'Mevlana', lat: 38.6905, lng: 35.5512 },
+  { id: 'bahcelievler', label: 'Bahçelievler', lat: 38.7024, lng: 35.5388 },
+  { id: 'yenidogan', label: 'Yenidoğan', lat: 38.7488, lng: 35.4562 },
+  { id: 'erkilet', label: 'Erkilet', lat: 38.7412, lng: 35.4286 },
 ]
 
 const AUTH_STORAGE_KEY = 'evyemegi_auth'
@@ -71,17 +89,18 @@ function loadStoredAuth() {
 
 function App() {
   const [activeTab, setActiveTab] = useState('search')
-  const [mapCenter, setMapCenter] = useState(TURKEY_CENTER)
-  const [mapZoom, setMapZoom] = useState(TURKEY_CENTER.zoom)
+  const [mapCenter, setMapCenter] = useState(KAYSERI_DEFAULT)
+  const [mapZoom, setMapZoom] = useState(14)
   const [flyToTarget, setFlyToTarget] = useState(null)
-  const [userGps, setUserGps] = useState(null)
-  const [locationLabel, setLocationLabel] = useState('')
-  const [locationDenied, setLocationDenied] = useState(false)
+  const [userGps, setUserGps] = useState(KAYSERI_DEFAULT)
+  const [locationLabel, setLocationLabel] = useState(KAYSERI_LABEL)
+  const [selectedPlace, setSelectedPlace] = useState('melikgazi')
+  const [mobileMapOpen, setMobileMapOpen] = useState(false)
 
-  const [meals, setMeals] = useState(() => fallbackMealsNear(null))
-  const [loadingMeals, setLoadingMeals] = useState(false)
+  const [meals, setMeals] = useState([])
+  const [loadingMeals, setLoadingMeals] = useState(true)
   const [mealsError, setMealsError] = useState(null)
-  const [usingFallback, setUsingFallback] = useState(true)
+  const [usingFallback, setUsingFallback] = useState(false)
   const [mealFilter, setMealFilter] = useState('all')
   const [selectedId, setSelectedId] = useState(null)
 
@@ -168,18 +187,25 @@ function App() {
   const labelSeqRef = useRef(0)
   const manualLockRef = useRef(false)
 
-  const applyUserPoint = useCallback((next, { fly = false, manual = false } = {}) => {
+  const applyUserPoint = useCallback((next, { fly = false, manual = false, zoom = 16, label, placeId } = {}) => {
     if (manual) manualLockRef.current = true
     const point = { lat: next.lat, lng: next.lng }
     setUserGps(point)
     setMapCenter(point)
-    setMapZoom(16)
+    setMapZoom(zoom)
     if (fly) {
-      setFlyToTarget({ id: Date.now(), ...point, zoom: 16 })
+      setFlyToTarget({ id: Date.now(), ...point, zoom })
     }
-    setLocationDenied(false)
     setMealsError(null)
     fetchMeals(point)
+    if (placeId) setSelectedPlace(placeId)
+    else if (!manual) setSelectedPlace(null)
+
+    if (label) {
+      setLocationLabel(label)
+      labelAnchorRef.current = point
+      return
+    }
 
     const dist = movedMeters(labelAnchorRef.current, point)
     if (labelAnchorRef.current && dist < 80) return
@@ -187,18 +213,16 @@ function App() {
     const seq = labelSeqRef.current + 1
     labelSeqRef.current = seq
     reversePlaceLabel(point.lat, point.lng)
-      .then((label) => {
-        if (seq === labelSeqRef.current && label) setLocationLabel(label)
+      .then((found) => {
+        if (seq === labelSeqRef.current && found) setLocationLabel(found)
       })
       .catch(() => {})
   }, [fetchMeals])
 
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setLocationDenied(true)
-      showFallbackMeals(null)
-      return undefined
-    }
+    fetchMeals(KAYSERI_DEFAULT)
+
+    if (!navigator.geolocation) return undefined
 
     const seen = { point: null, accuracy: Infinity }
     const onFix = (pos) => {
@@ -214,18 +238,11 @@ function App() {
       seen.point = next
       applyUserPoint(next, { fly })
     }
-    const onError = (err) => {
-      if (err?.code === 1 && !seen.point) {
-        setUserGps(null)
-        setLocationDenied(true)
-        showFallbackMeals(null)
-      }
-    }
 
-    navigator.geolocation.getCurrentPosition(onFix, onError, GEO_OPTIONS)
-    const watchId = navigator.geolocation.watchPosition(onFix, onError, GEO_OPTIONS)
+    navigator.geolocation.getCurrentPosition(onFix, () => {}, GEO_OPTIONS)
+    const watchId = navigator.geolocation.watchPosition(onFix, () => {}, GEO_OPTIONS)
     return () => navigator.geolocation.clearWatch(watchId)
-  }, [applyUserPoint, showFallbackMeals])
+  }, [applyUserPoint, fetchMeals])
 
   useEffect(() => {
     if (!user) return undefined
@@ -295,18 +312,16 @@ function App() {
     if (userGps) fetchMeals(userGps)
   }
 
-  const retryLocation = () => {
-    if (!navigator.geolocation) return
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        manualLockRef.current = false
-        applyUserPoint(pointFromPosition(pos), { fly: true })
+  const choosePlace = (place) => {
+    applyUserPoint(
+      { lat: place.lat, lng: place.lng },
+      {
+        fly: true,
+        manual: true,
+        zoom: 15,
+        label: `${place.label}, Kayseri`,
+        placeId: place.id,
       },
-      () => {
-        setLocationDenied(true)
-        showFallbackMeals(null)
-      },
-      GEO_OPTIONS,
     )
   }
 
@@ -452,7 +467,7 @@ function App() {
           </div>
         </button>
 
-        <div className="header-right">
+        <div className="header-cluster">
           <nav className="tab-nav" aria-label="Ana sekmeler">
             <button
               type="button"
@@ -460,15 +475,20 @@ function App() {
               onClick={handleShareTab}
             >
               <ChefHat size={18} aria-hidden />
-              Aşçı mısın? Yemek Paylaş
+              <span className="tab-label-full">Aşçı mısın? Yemek Paylaş</span>
+              <span className="tab-label-short">Paylaş</span>
             </button>
             <button
               type="button"
               className={`tab-btn ${activeTab === 'search' ? 'is-active' : ''}`}
-              onClick={() => setActiveTab('search')}
+              onClick={() => {
+                setMobileMapOpen(false)
+                setActiveTab('search')
+              }}
             >
               <Search size={18} aria-hidden />
-              Yemek Ara
+              <span className="tab-label-full">Yemek Ara</span>
+              <span className="tab-label-short">Ara</span>
             </button>
             {user && (
               <button
@@ -476,16 +496,19 @@ function App() {
                 className={`tab-btn ${activeTab === 'orders' ? 'is-active' : ''}`}
                 onClick={() => {
                   if (!ensureVerified()) return
+                  setMobileMapOpen(false)
                   setActiveTab('orders')
                   setOrdersKey((k) => k + 1)
                 }}
               >
                 <ClipboardList size={18} aria-hidden />
-                Siparişlerim & İlanlarım
+                <span className="tab-label-full">Siparişlerim & İlanlarım</span>
+                <span className="tab-label-short">Sipariş</span>
               </button>
             )}
           </nav>
 
+          <div className="header-actions">
           {user ? (
             <div className="user-chip">
               <div className="user-chip-text">
@@ -501,7 +524,8 @@ function App() {
                 setWalletOpen(true)
               }}>
                 <Wallet size={15} aria-hidden />
-                Cüzdan: {Number(user.bakiye ?? 0).toFixed(0)} ₺
+                <span className="tab-label-full">Cüzdan: {Number(user.bakiye ?? 0).toFixed(0)} ₺</span>
+                <span className="tab-label-short">{Number(user.bakiye ?? 0).toFixed(0)} ₺</span>
               </button>
               <button
                 type="button"
@@ -511,7 +535,7 @@ function App() {
                   setWalletOpen(true)
                 }}
               >
-                + Bakiye Yükle
+                <span className="topup-label">+ Bakiye</span>
               </button>
               <button
                 type="button"
@@ -521,16 +545,19 @@ function App() {
                   setDeliveryInfo(null)
                   setActiveTab('search')
                 }}
+                aria-label="Çıkış Yap"
               >
                 <LogOut size={16} aria-hidden />
-                Çıkış Yap
+                <span className="logout-label">Çıkış</span>
               </button>
             </div>
           ) : (
             <button type="button" className="auth-trigger" onClick={() => openAuth('login')}>
-              Giriş Yap / Kayıt Ol
+              <span className="tab-label-full">Giriş Yap</span>
+              <span className="tab-label-short">Giriş</span>
             </button>
           )}
+          </div>
         </div>
       </header>
 
@@ -543,12 +570,40 @@ function App() {
         </div>
       )}
 
-      {locationDenied && (
-        <div className="delivery-banner is-error animate-fade-in" role="alert">
-          Yakınınızdaki yemekleri görebilmek için konum izni vermelisiniz.{' '}
-          <button type="button" className="linkish-btn" onClick={retryLocation}>
-            Konumu yeniden dene
-          </button>
+      {activeTab === 'search' && (
+        <div className="place-bar">
+          <p className="place-bar-label">
+            <MapPin size={15} aria-hidden />
+            {locationLabel || KAYSERI_LABEL}
+          </p>
+          <div className="place-chips" role="listbox" aria-label="İlçe">
+            {KAYSERI_DISTRICTS.map((place) => (
+              <button
+                key={place.id}
+                type="button"
+                role="option"
+                aria-selected={selectedPlace === place.id}
+                className={`place-chip ${selectedPlace === place.id ? 'is-active' : ''}`}
+                onClick={() => choosePlace(place)}
+              >
+                {place.label}
+              </button>
+            ))}
+          </div>
+          <div className="place-chips" role="listbox" aria-label="Mahalle">
+            {KAYSERI_NEIGHBORHOODS.map((place) => (
+              <button
+                key={place.id}
+                type="button"
+                role="option"
+                aria-selected={selectedPlace === place.id}
+                className={`place-chip ${selectedPlace === place.id ? 'is-active' : ''}`}
+                onClick={() => choosePlace(place)}
+              >
+                {place.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -582,7 +637,7 @@ function App() {
           </div>
         ) : (
           <>
-            <section className="map-panel animate-fade-in">
+            <section className={`map-panel animate-fade-in ${mobileMapOpen ? 'is-sheet' : ''}`}>
               <div className="map-frame">
                 <LocationSearch onSelect={handlePlaceSelect} locationLabel={locationLabel} />
                 <MealMap
@@ -594,13 +649,14 @@ function App() {
                   onSelect={setSelectedId}
                   followCenter={false}
                   flyToTarget={flyToTarget}
+                  layoutTick={mobileMapOpen ? 1 : 0}
                   onUserPositionChange={(point, meta) => {
-                    if (meta?.gps) manualLockRef.current = false
-                    applyUserPoint(point, { manual: Boolean(meta?.manual) })
-                  }}
-                  onGpsError={() => {
-                    setLocationDenied(true)
-                    showFallbackMeals(userGps)
+                    if (meta?.gps) {
+                      manualLockRef.current = false
+                      applyUserPoint(point, { manual: false, fly: true })
+                    } else {
+                      applyUserPoint(point, { manual: Boolean(meta?.manual) })
+                    }
                   }}
                 />
               </div>
@@ -693,6 +749,16 @@ function App() {
           </>
         )}
       </main>
+
+      {activeTab === 'search' && (
+        <button
+          type="button"
+          className="map-fab"
+          onClick={() => setMobileMapOpen((open) => !open)}
+        >
+          {mobileMapOpen ? '📋 Listeye Dön' : '🗺️ Haritada Gör'}
+        </button>
+      )}
 
       <AuthModal
         open={authOpen}

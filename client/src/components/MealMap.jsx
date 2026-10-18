@@ -55,11 +55,29 @@ function FlyToTarget({ target }) {
   const map = useMap()
 
   useEffect(() => {
-    if (!target?.lat || !target?.lng) return
-    map.flyTo([target.lat, target.lng], target.zoom ?? 15, {
-      duration: 1.1,
-      easeLinearity: 0.25,
-    })
+    if (!Number.isFinite(target?.lat) || !Number.isFinite(target?.lng)) return undefined
+    let tries = 0
+    let timer = 0
+    const run = () => {
+      const size = map.getSize()
+      if (!size?.x || !size?.y) {
+        if (tries < 10) {
+          tries += 1
+          timer = window.setTimeout(run, 80)
+        }
+        return
+      }
+      try {
+        map.flyTo([target.lat, target.lng], target.zoom ?? 15, {
+          duration: 1.1,
+          easeLinearity: 0.25,
+        })
+      } catch {
+        /* harita henüz ölçülmemiş */
+      }
+    }
+    run()
+    return () => window.clearTimeout(timer)
   }, [map, target?.id, target?.lat, target?.lng, target?.zoom])
 
   return null
@@ -147,6 +165,15 @@ function MapApiBinder({ onMap }) {
   return null
 }
 
+function InvalidateOnOpen({ tick }) {
+  const map = useMap()
+  useEffect(() => {
+    const id = window.setTimeout(() => map.invalidateSize(), 50)
+    return () => window.clearTimeout(id)
+  }, [map, tick])
+  return null
+}
+
 export default function MealMap({
   userPosition,
   gpsPosition = null,
@@ -160,6 +187,7 @@ export default function MealMap({
   flyToTarget = null,
   onUserPositionChange,
   onGpsError,
+  layoutTick = 0,
 }) {
   const [baseLayer, setBaseLayer] = useState('streets') // streets | satellite
   const [mapInstance, setMapInstance] = useState(null)
@@ -227,6 +255,7 @@ export default function MealMap({
 
         <ZoomControl position="bottomleft" />
         <MapApiBinder onMap={onMapReady} />
+        <InvalidateOnOpen tick={layoutTick} />
         <Recenter position={center} zoom={zoom} enabled={followCenter && !flyToTarget} />
         <FlyToTarget target={flyToTarget} />
         <CenterPinReporter enabled={pickMode} onCenter={onMapClick} />
