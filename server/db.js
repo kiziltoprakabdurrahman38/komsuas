@@ -28,6 +28,7 @@ function resolveServer() {
 function buildConfig() {
   const { server, instanceName } = resolveServer();
   const port = process.env.DB_PORT ? Number(process.env.DB_PORT) : undefined;
+  const azure = server.endsWith('.database.windows.net');
 
   return {
     server,
@@ -36,8 +37,10 @@ function buildConfig() {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     options: {
-      encrypt: process.env.DB_ENCRYPT !== 'false',
-      trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE !== 'false',
+      encrypt: azure ? true : process.env.DB_ENCRYPT !== 'false',
+      trustServerCertificate: azure
+        ? false
+        : process.env.DB_TRUST_SERVER_CERTIFICATE !== 'false',
       enableArithAbort: true,
       ...(instanceName && !port ? { instanceName } : {}),
     },
