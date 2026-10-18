@@ -18,6 +18,7 @@ import ShareMealWizard from './components/ShareMealWizard.jsx'
 import ReviewModal from './components/ReviewModal.jsx'
 import RatingBadge from './components/RatingBadge.jsx'
 import ProfileDrawer, { initials } from './components/ProfileDrawer.jsx'
+import LocationSelector from './components/LocationSelector.jsx'
 import { apiBaseUrl, apiOrigin } from './apiConfig.js'
 import {
   GEO_OPTIONS,
@@ -37,24 +38,6 @@ const MEAL_FILTERS = [
 
 const KAYSERI_DEFAULT = { lat: 38.7205, lng: 35.4826 }
 const KAYSERI_LABEL = 'Melikgazi, Kayseri'
-
-const KAYSERI_DISTRICTS = [
-  { id: 'melikgazi', label: 'Melikgazi', lat: 38.7205, lng: 35.4826 },
-  { id: 'talas', label: 'Talas', lat: 38.6892, lng: 35.5464 },
-  { id: 'kocasinan', label: 'Kocasinan', lat: 38.7462, lng: 35.4528 },
-]
-
-const KAYSERI_NEIGHBORHOODS = [
-  { id: 'kicikapi', label: 'Kıçıkapı', lat: 38.7205, lng: 35.4882 },
-  { id: 'sahabiye', label: 'Sahabiye', lat: 38.7264, lng: 35.4908 },
-  { id: 'alpaslan', label: 'Alpaslan', lat: 38.7312, lng: 35.4786 },
-  { id: 'mevlana', label: 'Mevlana', lat: 38.6905, lng: 35.5512 },
-  { id: 'bahcelievler', label: 'Bahçelievler', lat: 38.7024, lng: 35.5388 },
-  { id: 'yenidogan', label: 'Yenidoğan', lat: 38.7488, lng: 35.4562 },
-  { id: 'erkilet', label: 'Erkilet', lat: 38.7412, lng: 35.4286 },
-]
-
-const KAYSERI_PLACES = [...KAYSERI_DISTRICTS, ...KAYSERI_NEIGHBORHOODS]
 
 const AUTH_STORAGE_KEY = 'evyemegi_auth'
 const api = axios.create({ baseURL: apiBaseUrl })
@@ -91,11 +74,9 @@ function App() {
   const [flyToTarget, setFlyToTarget] = useState(null)
   const [userGps, setUserGps] = useState(KAYSERI_DEFAULT)
   const [locationLabel, setLocationLabel] = useState(KAYSERI_LABEL)
-  const [selectedPlace, setSelectedPlace] = useState('melikgazi')
-  const [locationOpen, setLocationOpen] = useState(false)
+  const [selectedDistrict, setSelectedDistrict] = useState('Melikgazi')
   const [query, setQuery] = useState('')
   const [profileOpen, setProfileOpen] = useState(false)
-  const locationRef = useRef(null)
 
   const [meals, setMeals] = useState([])
   const [loadingMeals, setLoadingMeals] = useState(true)
@@ -198,8 +179,7 @@ function App() {
     }
     setMealsError(null)
     fetchMeals(point)
-    if (placeId) setSelectedPlace(placeId)
-    else if (!manual) setSelectedPlace(null)
+    if (placeId) setSelectedDistrict(placeId)
 
     if (label) {
       setLocationLabel(label)
@@ -299,14 +279,15 @@ function App() {
     return () => socket.disconnect()
   }, [user?.id, userGps, fetchMeals])
 
-  const choosePlace = (place) => {
+  const chooseDistrict = (district) => {
+    setSelectedDistrict(district.label)
     applyUserPoint(
-      { lat: place.lat, lng: place.lng },
+      { lat: district.lat, lng: district.lng },
       {
         manual: true,
         zoom: 15,
-        label: `${place.label}, Kayseri`,
-        placeId: place.id,
+        label: `${district.label}, Kayseri`,
+        placeId: district.label,
       },
     )
   }
@@ -433,15 +414,6 @@ function App() {
     if (action?.type === 'share') setActiveTab('share')
   }
 
-  useEffect(() => {
-    if (!locationOpen) return undefined
-    const close = (event) => {
-      if (!locationRef.current?.contains(event.target)) setLocationOpen(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [locationOpen])
-
   const visibleMeals = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase('tr')
     return meals
@@ -457,13 +429,6 @@ function App() {
       })
       .sort((a, b) => Number(a.distanceKm) - Number(b.distanceKm))
   }, [meals, mealFilter, query])
-
-  const matchedPlace = KAYSERI_PLACES.find((place) => (locationLabel || '').includes(place.label))
-  const headerPlace = `Kayseri, ${
-    KAYSERI_PLACES.find((place) => place.id === selectedPlace)?.label
-    || matchedPlace?.label
-    || 'Melikgazi'
-  }`
 
   return (
     <div className="app-shell">
@@ -481,37 +446,7 @@ function App() {
               <p className="brand-sub">Kapıdan Sıcak Ev Yemeği</p>
             </div>
           </button>
-          <div className="loc-wrap" ref={locationRef}>
-            <button
-              type="button"
-              className="loc-chip"
-              onClick={() => setLocationOpen((open) => !open)}
-              aria-expanded={locationOpen}
-            >
-              <MapPin size={15} aria-hidden />
-              {headerPlace}
-              <span aria-hidden>▾</span>
-            </button>
-            {locationOpen && (
-              <div className="loc-popover" role="listbox" aria-label="Konum seç">
-                {KAYSERI_PLACES.map((place) => (
-                  <button
-                    key={place.id}
-                    type="button"
-                    role="option"
-                    aria-selected={selectedPlace === place.id}
-                    className={selectedPlace === place.id ? 'is-active' : ''}
-                    onClick={() => {
-                      choosePlace(place)
-                      setLocationOpen(false)
-                    }}
-                  >
-                    {place.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <LocationSelector selectedDistrict={selectedDistrict} onSelect={chooseDistrict} />
         </div>
 
         <form className="search-bar" role="search" onSubmit={(event) => event.preventDefault()}>
