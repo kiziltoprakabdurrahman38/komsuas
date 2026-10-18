@@ -78,6 +78,7 @@ function App() {
   const [flyToTarget, setFlyToTarget] = useState(null)
   const [userGps, setUserGps] = useState(KAYSERI_DEFAULT)
   const [locationLabel, setLocationLabel] = useState(KAYSERI_LABEL)
+  const [selectedCity, setSelectedCity] = useState('Kayseri')
   const [selectedDistrict, setSelectedDistrict] = useState('Melikgazi')
   const [query, setQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
@@ -176,7 +177,7 @@ function App() {
   const labelSeqRef = useRef(0)
   const manualLockRef = useRef(false)
 
-  const applyUserPoint = useCallback((next, { fly = false, manual = false, zoom = 16, label, placeId } = {}) => {
+  const applyUserPoint = useCallback((next, { fly = false, manual = false, zoom = 16, label } = {}) => {
     if (manual) manualLockRef.current = true
     const point = { lat: next.lat, lng: next.lng }
     setUserGps(point)
@@ -187,7 +188,6 @@ function App() {
     }
     setMealsError(null)
     fetchMeals(point)
-    if (placeId) setSelectedDistrict(placeId)
 
     if (label) {
       setLocationLabel(label)
@@ -287,15 +287,15 @@ function App() {
     return () => socket.disconnect()
   }, [user?.id, userGps, fetchMeals])
 
-  const chooseDistrict = (district) => {
-    setSelectedDistrict(district.label)
+  const choosePlace = (place) => {
+    setSelectedCity(place.city)
+    setSelectedDistrict(place.district)
     applyUserPoint(
-      { lat: district.lat, lng: district.lng },
+      { lat: place.lat, lng: place.lng },
       {
         manual: true,
-        zoom: 15,
-        label: `${district.label}, Kayseri`,
-        placeId: district.label,
+        zoom: 14,
+        label: `${place.district}, ${place.city}`,
       },
     )
   }
@@ -472,7 +472,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <header className="site-header market-header animate-fade-down">
+      <header className="site-header market-header sticky top-0 z-40 border-b border-emerald-950/5 bg-[#f4f7f5]/85 backdrop-blur-md transition-all animate-fade-down">
         <div className="header-brand">
           <button
             type="button"
@@ -486,10 +486,10 @@ function App() {
               <p className="brand-sub">Kapıdan Sıcak Ev Yemeği</p>
             </div>
           </button>
-          <LocationSelector selectedDistrict={selectedDistrict} onSelect={chooseDistrict} />
+          <LocationSelector city={selectedCity} district={selectedDistrict} onSelect={choosePlace} />
         </div>
 
-        <form className="search-bar" role="search" onSubmit={(event) => event.preventDefault()}>
+        <form className="search-bar rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm focus-within:bg-white" role="search" onSubmit={(event) => event.preventDefault()}>
           <Search size={18} aria-hidden />
           <input
             ref={searchRef}
