@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Circle, MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import { BadgeCheck, LocateFixed, MapPin, Navigation, X } from 'lucide-react'
+import { BadgeCheck, LocateFixed, Map as MapIcon, MapPin, Navigation, Satellite, X } from 'lucide-react'
 import { GEO_OPTIONS, pointFromPosition } from '../locationGeo.js'
 
 const OSM_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
@@ -70,6 +70,13 @@ function allergenNote(text) {
   return match ? match[0].trim() : ''
 }
 
+function guardMapButton(node) {
+  if (!node || node.dataset.mapGuard === '1') return
+  node.dataset.mapGuard = '1'
+  L.DomEvent.disableClickPropagation(node)
+  L.DomEvent.disableScrollPropagation(node)
+}
+
 function finitePoint(point) {
   const lat = Number(point?.lat)
   const lng = Number(point?.lng)
@@ -81,7 +88,7 @@ export default function MealDetailModal({ meal, kindLabel, userLocation, onClose
   const onCloseRef = useRef(onClose)
   const mapRef = useRef(null)
   onCloseRef.current = onClose
-  const [satellite, setSatellite] = useState(false)
+  const [isSatellite, setIsSatellite] = useState(false)
   const [userPoint, setUserPoint] = useState(() => finitePoint(userLocation))
 
   useEffect(() => {
@@ -246,9 +253,9 @@ export default function MealDetailModal({ meal, kindLabel, userLocation, onClose
                   attributionControl
                 >
                   <TileLayer
-                    key={satellite ? 'satellite' : 'streets'}
-                    url={satellite ? SAT_URL : OSM_URL}
-                    attribution={satellite ? SAT_ATTR : OSM_ATTR}
+                    key={isSatellite ? 'satellite' : 'streets'}
+                    url={isSatellite ? SAT_URL : OSM_URL}
+                    attribution={isSatellite ? SAT_ATTR : OSM_ATTR}
                     maxZoom={19}
                   />
                   <Marker position={[lat, lng]} icon={doorPin} />
@@ -269,10 +276,21 @@ export default function MealDetailModal({ meal, kindLabel, userLocation, onClose
                 </MapContainer>
                 <button
                   type="button"
-                  className="absolute bottom-3 left-3 z-[1000] bg-white/95 text-slate-700 hover:bg-slate-100 px-2.5 py-1.5 rounded-lg shadow-md border border-slate-200 text-xs font-semibold flex items-center gap-1.5"
-                  onClick={() => setSatellite((on) => !on)}
+                  ref={guardMapButton}
+                  title="Uydu / Harita Görünümünü Değiştir"
+                  aria-label="Uydu Harita Geçişi"
+                  className={`absolute top-3 right-3 z-[1000] w-10 h-10 bg-white/95 hover:bg-white text-slate-700 rounded-xl shadow-md hover:shadow-lg border flex items-center justify-center transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95 ${
+                    isSatellite
+                      ? 'ring-2 ring-emerald-500 border-transparent text-emerald-600'
+                      : 'border-slate-200/90'
+                  }`}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setIsSatellite((prev) => !prev)
+                  }}
                 >
-                  {satellite ? '🗺️ Harita' : '🛰️ Uydu'}
+                  {isSatellite ? <MapIcon size={18} aria-hidden /> : <Satellite size={18} aria-hidden />}
                 </button>
                 <button
                   type="button"
