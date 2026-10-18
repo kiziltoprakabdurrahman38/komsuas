@@ -527,8 +527,15 @@ button {
   padding: 0;
   display: grid;
   width: 100%;
+  align-items: stretch;
   grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
+}
+
+.meal-grid > li {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 @media (min-width: 640px) {
@@ -550,22 +557,7 @@ button {
 }
 
 .meal-card {
-  display: flex;
-  flex-direction: column;
-  background: var(--surface-solid);
-  border: 1px solid rgba(15, 76, 69, 0.1);
-  border-radius: 16px;
-  padding: 0 0 0.85rem;
-  overflow: hidden;
-  box-shadow: 0 8px 24px rgba(20, 32, 28, 0.08);
-  transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
-}
-
-.meal-card:hover,
-.meal-card.is-selected {
-  border-color: rgba(15, 76, 69, 0.35);
-  transform: translateY(-3px);
-  box-shadow: 0 16px 36px rgba(20, 32, 28, 0.12);
+  min-width: 0;
 }
 
 .distance-badge {
@@ -579,7 +571,6 @@ button {
 .meal-card-hit {
   display: block;
   width: 100%;
-  padding: 0.85rem 0.9rem 0;
   border: 0;
   background: transparent;
   text-align: left;
@@ -637,8 +628,7 @@ button {
 }
 
 .reserve-btn {
-  margin: 0.75rem 0.9rem 0;
-  width: calc(100% - 1.8rem);
+  width: 100%;
   border: 0;
   border-radius: 12px;
   padding: 0.7rem 1rem;
@@ -1175,6 +1165,21 @@ button {
   border-radius: 0;
   margin: 0;
   display: block;
+}
+
+.door-pin {
+  background: transparent;
+  border: 0;
+}
+
+.door-pin-dot {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #059669;
+  border: 3px solid #fff;
+  box-shadow: 0 4px 12px rgba(15, 76, 69, 0.35);
 }
 
 .map-popup {
@@ -1992,6 +1997,11 @@ button {
 
 .header-actions {
   justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+.share-plus {
+  display: none;
 }
 
 .profile-btn,
@@ -2005,11 +2015,13 @@ button {
   cursor: pointer;
 }
 
-.profile-btn {
+.profile-btn,
+.auth-trigger {
+  height: 2.75rem;
   border: 1px solid var(--line);
   background: #fff;
   color: var(--ink);
-  padding: 0.45rem 0.75rem;
+  padding: 0 0.75rem;
   white-space: nowrap;
 }
 
@@ -2029,7 +2041,7 @@ button {
   align-items: center;
   gap: 0.45rem;
   min-width: 0;
-  height: 48px;
+  height: 2.75rem;
   padding: 0 0.85rem 0 1rem;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -2292,5 +2304,9 @@ button {
 @media (max-width: 640px) {
   .brand-sub,
   .share-label { display: none; }
-  .header-brand { flex-wrap: wrap; }
+  .share-plus { display: inline; }
+  .share-chef { padding-left: 0.7rem; padding-right: 0.7rem; }
+  .market-header { align-items: start; }
+  .header-brand { flex-wrap: wrap; min-width: 0; }
+  .header-actions { flex-shrink: 0; }
 }

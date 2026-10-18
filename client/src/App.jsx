@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { io } from 'socket.io-client'
 import {
+  ChefHat,
   MapPin,
   UtensilsCrossed,
   Search,
-  Plus,
   X,
 } from 'lucide-react'
 import AuthModal from './components/AuthModal.jsx'
@@ -19,6 +19,7 @@ import ReviewModal from './components/ReviewModal.jsx'
 import RatingBadge from './components/RatingBadge.jsx'
 import ProfileDrawer, { initials } from './components/ProfileDrawer.jsx'
 import LocationSelector from './components/LocationSelector.jsx'
+import MealDetailModal from './components/MealDetailModal.jsx'
 import { apiBaseUrl, apiOrigin } from './apiConfig.js'
 import {
   GEO_OPTIONS,
@@ -84,6 +85,7 @@ function App() {
   const [usingFallback, setUsingFallback] = useState(false)
   const [mealFilter, setMealFilter] = useState('all')
   const [selectedId, setSelectedId] = useState(null)
+  const [detailMeal, setDetailMeal] = useState(null)
 
   const [auth, setAuth] = useState(() => loadStoredAuth())
   const [authOpen, setAuthOpen] = useState(false)
@@ -465,9 +467,15 @@ function App() {
         </form>
 
         <div className="header-actions">
-          <button type="button" className="share-cta" onClick={handleShareTab}>
-            <Plus size={16} aria-hidden />
-            <span className="share-label">Aşçı Ol / Yemek Paylaş</span>
+          <button
+            type="button"
+            className="share-chef h-11 shrink-0 whitespace-nowrap rounded-xl bg-emerald-600 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow-md flex items-center gap-2"
+            onClick={handleShareTab}
+            aria-label="Yemek Paylaş"
+          >
+            <ChefHat size={16} aria-hidden />
+            <span className="share-label">Yemek Paylaş</span>
+            <span className="share-plus" aria-hidden>+</span>
           </button>
           {user ? (
             <button type="button" className="profile-btn" onClick={() => setProfileOpen(true)}>
@@ -550,53 +558,73 @@ function App() {
               )}
 
               <ul className="meal-grid">
-                {visibleMeals.map((meal, index) => (
+                {visibleMeals.map((meal, index) => {
+                  const kindLabel = MEAL_FILTERS.find((item) => item.id === mealKind(meal))?.label || 'Ev Yemeği'
+                  return (
                   <li
                     key={meal.id}
-                    className={`meal-card animate-rise ${selectedId === meal.id ? 'is-selected' : ''}`}
+                    className="flex min-w-0 flex-col"
                     style={{ animationDelay: `${0.05 + index * 0.05}s` }}
                   >
-                    {meal.imageUrl && (
-                      <img className="meal-cover" src={meal.imageUrl} alt={meal.title} />
-                    )}
-                    <button
-                      type="button"
-                      className="meal-card-hit"
-                      onClick={() => setSelectedId(meal.id)}
+                    <article
+                      className={`meal-card flex h-full w-full flex-1 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:shadow-xl ${selectedId === meal.id ? 'ring-2 ring-emerald-600' : ''}`}
                     >
-                      <div className="meal-card-top">
-                        <h3>{meal.title}</h3>
-                        <span className="meal-price">{Number(meal.price)} ₺</span>
+                      <button
+                        type="button"
+                        className="meal-card-hit"
+                        onClick={() => {
+                          setSelectedId(meal.id)
+                          setDetailMeal(meal)
+                        }}
+                      >
+                        <div className="relative">
+                          {meal.imageUrl ? (
+                            <img className="h-40 w-full object-cover" src={meal.imageUrl} alt="" />
+                          ) : (
+                            <div className="h-40 w-full bg-slate-100" />
+                          )}
+                          <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                            {kindLabel}
+                          </span>
+                          <span className="absolute right-3 top-3 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white">
+                            {Number(meal.price)} ₺
+                          </span>
+                        </div>
+                        <div className="px-4 pb-3 pt-3 text-left">
+                          <h3 className="line-clamp-2 min-h-[2.75rem] text-base font-semibold text-slate-900">{meal.title}</h3>
+                          <p className="mt-1 flex flex-wrap items-center gap-1 text-sm font-medium text-slate-600">
+                            {meal.chef}
+                            <RatingBadge score={meal.chefRating} count={meal.chefReviewCount} />
+                          </p>
+                          <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-xs text-slate-500">{meal.description}</p>
+                        </div>
+                      </button>
+                      <div className="mt-auto flex flex-col gap-2.5 border-t border-slate-100 px-4 pb-4 pt-3">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-slate-600">
+                          <span className="inline-flex items-center gap-1">
+                            <UtensilsCrossed size={14} aria-hidden />
+                            {meal.portions} porsiyon
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-emerald-700">
+                            <MapPin size={14} aria-hidden />
+                            {Number(meal.distanceKm).toFixed(1)} km
+                            {meal.ilce ? ` • ${meal.ilce}` : ''}
+                          </span>
+                          <span>Kapora %{meal.depositRate ?? 30}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="reserve-btn"
+                          onClick={() => handleReserveClick(meal)}
+                          disabled={meal.portions < 1}
+                        >
+                          Rezerve Et
+                        </button>
                       </div>
-                      <p className="meal-chef">
-                        {meal.chef}{' '}
-                        <RatingBadge score={meal.chefRating} count={meal.chefReviewCount} />
-                      </p>
-                      <RatingBadge score={meal.rating} count={meal.reviewCount} />
-                      <p className="meal-note">{meal.description}</p>
-                      <div className="meal-meta">
-                        <span>
-                          <UtensilsCrossed size={14} aria-hidden />
-                          {meal.portions} porsiyon
-                        </span>
-                        <span className="distance-badge">
-                          <MapPin size={14} aria-hidden />
-                          {Number(meal.distanceKm).toFixed(1)} km
-                          {meal.ilce ? ` • ${meal.ilce}` : ''}
-                        </span>
-                        <span>Kapora %{meal.depositRate ?? 30}</span>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      className="reserve-btn"
-                      onClick={() => handleReserveClick(meal)}
-                      disabled={meal.portions < 1}
-                    >
-                      Rezerve Et
-                    </button>
+                    </article>
                   </li>
-                ))}
+                  )
+                })}
               </ul>
             </section>
         )}
@@ -666,6 +694,17 @@ function App() {
         onTopup={async (payload) => {
           const { data } = await api.post('/wallet/topup', payload)
           patchUser({ bakiye: data.bakiye })
+        }}
+      />
+
+      <MealDetailModal
+        meal={detailMeal}
+        kindLabel={detailMeal ? (MEAL_FILTERS.find((item) => item.id === mealKind(detailMeal))?.label || 'Ev Yemeği') : ''}
+        onClose={() => setDetailMeal(null)}
+        onReserve={() => {
+          const meal = detailMeal
+          setDetailMeal(null)
+          if (meal) handleReserveClick(meal)
         }}
       />
 
