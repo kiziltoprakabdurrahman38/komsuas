@@ -44,6 +44,9 @@ const KAYSERI_DEFAULT = { lat: 38.7205, lng: 35.4826 }
 const KAYSERI_LABEL = 'Melikgazi, Kayseri'
 
 const AUTH_STORAGE_KEY = 'evyemegi_auth'
+const WAKE_POLL_INTERVAL_MS = 3000
+const WAKE_POLL_MAX_ATTEMPTS = 25
+const LIVE_BADGE_MS = 2000
 const api = axios.create({ baseURL: apiBaseUrl })
 
 api.interceptors.request.use((config) => {
@@ -90,6 +93,9 @@ function App() {
   const [loadingMeals, setLoadingMeals] = useState(true)
   const [mealsError, setMealsError] = useState(null)
   const [usingFallback, setUsingFallback] = useState(false)
+  /** idle | connecting | live — Render cold-start sync indicator */
+  const [liveSyncStatus, setLiveSyncStatus] = useState('idle')
+  const [mealsRehydrating, setMealsRehydrating] = useState(false)
   const [mealFilter, setMealFilter] = useState('all')
   const [selectedId, setSelectedId] = useState(null)
   const [detailMeal, setDetailMeal] = useState(null)
@@ -142,40 +148,196 @@ function App() {
     return true
   }
 
+  const labelAnchorRef = useRef(null)
+  const labelSeqRef = useRef(0)
+  const manualLockRef = useRef(false)
+  const mountedRef = useRef(true)
+  const positionRef = useRef(userGps)
+  const usingFallbackRef = useRef(false)
+  const wakePollRef = useRef(null)
+  const liveBadgeTimerRef = useRef(null)
+  const rehydrateTimerRef = useRef(null)
+
+  useEffect(() => {
+    positionRef.current = userGps
+  }, [userGps])
+
+  useEffect(() => {
+    usingFallbackRef.current = usingFallback
+  }, [usingFallback])
+
+  const stopWakePoll = useCallback(() => {
+    const state = wakePollRef.current
+    if (!state) return
+    if (state.intervalId != null) window.clearInterval(state.intervalId)
+    state.controllers?.forEach((controller) => {
+      try {
+        controller.abort()
+      } catch {
+        /* ignore */
+      }
+    })
+    wakePollRef.current = null
+  }, [])
+
+  const showLiveBadgeBriefly = useCallback(() => {
+    if (liveBadgeTimerRef.current) window.clearTimeout(liveBadgeTimerRef.current)
+    setLiveSyncStatus('live')
+    liveBadgeTimerRef.current = window.setTimeout(() => {
+      if (mountedRef.current) setLiveSyncStatus('idle')
+      liveBadgeTimerRef.current = null
+    }, LIVE_BADGE_MS)
+  }, [])
+
+  const applyLiveMeals = useCallback((liveMeals, { fromFallback = false } = {}) => {
+    if (!mountedRef.current) return
+    setMeals(liveMeals)
+    setUsingFallback(false)
+    setMealsError(null)
+    setLoadingMeals(false)
+    stopWakePoll()
+    if (fromFallback) {
+      setMealsRehydrating(true)
+      if (rehydrateTimerRef.current) window.clearTimeout(rehydrateTimerRef.current)
+      rehydrateTimerRef.current = window.setTimeout(() => {
+        if (mountedRef.current) setMealsRehydrating(false)
+        rehydrateTimerRef.current = null
+      }, 600)
+      showLiveBadgeBriefly()
+    } else {
+      setLiveSyncStatus('idle')
+    }
+  }, [showLiveBadgeBriefly, stopWakePoll])
+
   const showFallbackMeals = useCallback((position) => {
+    if (!mountedRef.current) return
     setMeals(fallbackMealsNear(position))
     setUsingFallback(true)
     setMealsError(null)
   }, [])
 
+  const startWakePoll = useCallback((seedPosition) => {
+    if (wakePollRef.current) {
+      wakePollRef.current.seedPosition = seedPosition || wakePollRef.current.seedPosition
+      return
+    }
+
+    const state = {
+      attempts: 0,
+      seedPosition: seedPosition || positionRef.current || KAYSERI_DEFAULT,
+      intervalId: null,
+      controllers: [],
+      inFlight: false,
+    }
+    wakePollRef.current = state
+    if (mountedRef.current) setLiveSyncStatus('connecting')
+
+    const tick = async () => {
+      const active = wakePollRef.current
+      if (!active || active.inFlight) return
+      if (active.attempts >= WAKE_POLL_MAX_ATTEMPTS) {
+        stopWakePoll()
+        if (mountedRef.current) setLiveSyncStatus('idle')
+        return
+      }
+
+      active.attempts += 1
+      active.inFlight = true
+      const controller = new AbortController()
+      active.controllers.push(controller)
+      const pos = positionRef.current || active.seedPosition || KAYSERI_DEFAULT
+
+      try {
+        // Wake ping — any HTTP response means Render is up; network errors keep sleeping.
+        await api.get('/health', {
+          timeout: 5000,
+          signal: controller.signal,
+          validateStatus: () => true,
+        })
+
+        const { data, status } = await api.get('/meals', {
+          params: { lat: pos.lat, lng: pos.lng },
+          timeout: 12000,
+          signal: controller.signal,
+        })
+
+        if (!mountedRef.current || wakePollRef.current !== active) return
+        if (status !== 200 || !Array.isArray(data?.meals)) return
+
+        applyLiveMeals(data.meals, { fromFallback: true })
+      } catch {
+        /* still cold or transient — keep polling */
+      } finally {
+        if (wakePollRef.current === active) active.inFlight = false
+        active.controllers = active.controllers.filter((item) => item !== controller)
+      }
+    }
+
+    // First silent retry after the interval; the initial fetch already ran.
+    state.intervalId = window.setInterval(tick, WAKE_POLL_INTERVAL_MS)
+  }, [applyLiveMeals, stopWakePoll])
+
   const fetchMeals = useCallback(async (position) => {
     if (!position?.lat || !position?.lng) {
       showFallbackMeals(null)
       setLoadingMeals(false)
+      startWakePoll(KAYSERI_DEFAULT)
       return
     }
-    setLoadingMeals(true)
+
+    const hadFallback = usingFallbackRef.current
+    if (!hadFallback) setLoadingMeals(true)
     setMealsError(null)
+
+    const controller = new AbortController()
     try {
-      const { data } = await api.get('/meals', {
+      // Parallel wake ping so Render cold start begins even if meals is slow.
+      const healthPromise = api
+        .get('/health', {
+          timeout: 5000,
+          signal: controller.signal,
+          validateStatus: () => true,
+        })
+        .catch(() => null)
+
+      const mealsPromise = api.get('/meals', {
         params: {
           lat: position.lat,
           lng: position.lng,
         },
         timeout: 8000,
+        signal: controller.signal,
       })
-      setMeals(data.meals || [])
-      setUsingFallback(false)
-    } catch {
-      showFallbackMeals(position)
-    } finally {
-      setLoadingMeals(false)
-    }
-  }, [showFallbackMeals])
 
-  const labelAnchorRef = useRef(null)
-  const labelSeqRef = useRef(0)
-  const manualLockRef = useRef(false)
+      await healthPromise
+      const { data } = await mealsPromise
+      if (!mountedRef.current) return
+
+      if (!Array.isArray(data?.meals)) {
+        throw new Error('invalid meals payload')
+      }
+
+      applyLiveMeals(data.meals, { fromFallback: hadFallback || usingFallbackRef.current })
+    } catch (err) {
+      if (!mountedRef.current) return
+      if (axios.isCancel?.(err) || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') return
+      showFallbackMeals(position)
+      setLiveSyncStatus('connecting')
+      startWakePoll(position)
+    } finally {
+      if (mountedRef.current) setLoadingMeals(false)
+    }
+  }, [applyLiveMeals, showFallbackMeals, startWakePoll])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      stopWakePoll()
+      if (liveBadgeTimerRef.current) window.clearTimeout(liveBadgeTimerRef.current)
+      if (rehydrateTimerRef.current) window.clearTimeout(rehydrateTimerRef.current)
+    }
+  }, [stopWakePoll])
 
   const applyUserPoint = useCallback((next, { fly = false, manual = false, zoom = 16, label } = {}) => {
     if (manual) manualLockRef.current = true
@@ -573,7 +735,26 @@ function App() {
               </div>
 
               <div className="meals-heading animate-fade-in">
-                <h2>Yakınınızdaki Ev Yemekleri</h2>
+                <div className="meals-heading-row">
+                  <h2>Yakınınızdaki Ev Yemekleri</h2>
+                  {liveSyncStatus === 'connecting' && (
+                    <span className="live-sync-badge is-connecting" role="status" aria-live="polite">
+                      <span className="live-sync-dot-wrap" aria-hidden="true">
+                        <span className="live-sync-dot live-sync-dot-ping" />
+                        <span className="live-sync-dot live-sync-dot-core" />
+                      </span>
+                      <span className="live-sync-text">
+                        Canlı bulut sunucusu bağlanıyor, veriler eşitleniyor...
+                      </span>
+                    </span>
+                  )}
+                  {liveSyncStatus === 'live' && (
+                    <span className="live-sync-badge is-live" role="status" aria-live="polite">
+                      <span className="live-sync-dot live-sync-dot-live" aria-hidden="true" />
+                      <span className="live-sync-text">Canlı Veri Aktif</span>
+                    </span>
+                  )}
+                </div>
                 <p>
                   {loadingMeals
                     ? 'Yemekler yükleniyor…'
@@ -581,11 +762,6 @@ function App() {
                 </p>
               </div>
 
-              {usingFallback && (
-                <p className="meal-fallback-note">
-                  Örnek Kayseri vitrini gösteriliyor. Canlı liste bağlanınca kendiliğinden güncellenir.
-                </p>
-              )}
               {mealsError && <p className="form-feedback is-error">{mealsError}</p>}
               {!loadingMeals && visibleMeals.length === 0 && query.trim() && (
                 <div className="empty-card">
@@ -599,7 +775,7 @@ function App() {
                 <p className="empty-state">Bu türde yakın ilan yok.</p>
               )}
 
-              <ul className="meal-grid">
+              <ul className={`meal-grid${mealsRehydrating ? ' is-rehydrating' : ''}`}>
                 {visibleMeals.map((meal, index) => {
                   const kindLabel = MEAL_FILTERS.find((item) => item.id === mealKind(meal))?.label || 'Ev Yemeği'
                   return (
