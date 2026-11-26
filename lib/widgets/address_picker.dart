@@ -9,6 +9,8 @@ import '../turkey_places.dart';
 
 enum AddressPickerMode { browse, order, share }
 
+enum _PickField { none, city, district, neighborhood }
+
 Future<UserAddress?> showAddressPicker(
   BuildContext context, {
   required AddressPickerMode mode,
@@ -42,10 +44,13 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
   late String? _district;
   late String? _neighborhood;
   late final TextEditingController _street;
+  late final TextEditingController _search;
   late LatLng _pin;
   late final MapController _mapController = MapController();
   bool _busyGps = false;
   bool _showMap = false;
+  bool _mapReady = false;
+  _PickField _pickField = _PickField.none;
 
   @override
   void initState() {
@@ -55,6 +60,7 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
     _district = seed?.district.isNotEmpty == true ? seed!.district : null;
     _neighborhood = seed?.neighborhood.isNotEmpty == true ? seed!.neighborhood : null;
     _street = TextEditingController(text: seed?.street ?? '');
+    _search = TextEditingController();
     _pin = LatLng(seed?.lat ?? 38.7205, seed?.lng ?? 35.4826);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(() => _showMap = true);
@@ -64,6 +70,7 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
   @override
   void dispose() {
     _street.dispose();
+    _search.dispose();
     _mapController.dispose();
     super.dispose();
   }
@@ -75,13 +82,88 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
     return neighbourhoodsOfDistrict(_city!, _district!);
   }
 
+  List<String> get _activeItems {
+    switch (_pickField) {
+      case _PickField.city:
+        return TurkeyCatalog.instance.cities;
+      case _PickField.district:
+        return _districts;
+      case _PickField.neighborhood:
+        return _neighborhoods;
+      case _PickField.none:
+        return const [];
+    }
+  }
+
+  String get _activeTitle {
+    switch (_pickField) {
+      case _PickField.city:
+        return 'İl seç';
+      case _PickField.district:
+        return 'İlçe seç';
+      case _PickField.neighborhood:
+        return 'Mahalle seç';
+      case _PickField.none:
+        return '';
+    }
+  }
+
+  List<String> get _filteredItems {
+    final q = _search.text.trim().toLowerCase();
+    final items = _activeItems;
+    if (q.isEmpty) return items;
+    return items.where((item) => item.toLowerCase().contains(q)).toList();
+  }
+
+  void _safeMove(LatLng point, double zoom) {
+    if (!_showMap || !_mapReady) return;
+    try {
+      _mapController.move(point, zoom);
+    } catch (_) {
+      // Map not attached yet — ignore.
+    }
+  }
+
   void _applyDistrictCoords() {
     if (_city == null || _district == null) return;
     final center = districtCenter(_city!, _district!);
     if (center == null) return;
     final point = LatLng(center.lat, center.lng);
     setState(() => _pin = point);
-    _mapController.move(point, 14);
+    _safeMove(point, 14);
+  }
+
+  void _openPick(_PickField field) {
+    setState(() {
+      _pickField = field;
+      _search.clear();
+    });
+  }
+
+  void _selectItem(String value) {
+    setState(() {
+      switch (_pickField) {
+        case _PickField.city:
+          _city = value;
+          _district = null;
+          _neighborhood = null;
+          break;
+        case _PickField.district:
+          _district = value;
+          _neighborhood = null;
+          break;
+        case _PickField.neighborhood:
+          _neighborhood = value;
+          break;
+        case _PickField.none:
+          break;
+      }
+      _pickField = _PickField.none;
+      _search.clear();
+    });
+    if (_district != null && _neighborhood == null) {
+      _applyDistrictCoords();
+    }
   }
 
   Future<void> _useGps() async {
@@ -112,83 +194,7 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
     }
     final point = LatLng(position.latitude, position.longitude);
     setState(() => _pin = point);
-    _mapController.move(point, 16);
-  }
-
-  Future<String?> _pickFromList({
-    required String title,
-    required List<String> items,
-    String? selected,
-  }) async {
-    final query = TextEditingController();
-    var filtered = List<String>.from(items);
-    final result = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setSheet) {
-            return SafeArea(
-              child: SizedBox(
-                height: MediaQuery.sizeOf(context).height * 0.75,
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
-                      child: Row(
-                        children: [
-                          Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18))),
-                          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: TextField(
-                        controller: query,
-                        autofocus: true,
-                        decoration: const InputDecoration(
-                          prefixIcon: Icon(Icons.search),
-                          hintText: 'Ara…',
-                        ),
-                        onChanged: (value) {
-                          final q = value.trim().toLowerCase();
-                          setSheet(() {
-                            filtered = items
-                                .where((item) => q.isEmpty || item.toLowerCase().contains(q))
-                                .toList();
-                          });
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) {
-                          final item = filtered[index];
-                          return ListTile(
-                            title: Text(item),
-                            trailing: item == selected ? const Icon(Icons.check, color: brand) : null,
-                            onTap: () => Navigator.pop(context, item),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-    query.dispose();
-    return result;
+    _safeMove(point, 16);
   }
 
   void _confirm() {
@@ -233,6 +239,9 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
   Widget build(BuildContext context) {
     final height = MediaQuery.sizeOf(context).height * 0.92;
     final catalog = TurkeyCatalog.instance;
+    final picking = _pickField != _PickField.none;
+    final filtered = _filteredItems;
+
     return SizedBox(
       height: height,
       child: SafeArea(
@@ -244,149 +253,183 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
               padding: const EdgeInsets.fromLTRB(20, 14, 12, 8),
               child: Row(
                 children: [
-                  Expanded(child: Text(_title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
+                  if (picking)
+                    IconButton(
+                      onPressed: () => setState(() {
+                        _pickField = _PickField.none;
+                        _search.clear();
+                      }),
+                      icon: const Icon(Icons.arrow_back),
+                    ),
+                  Expanded(
+                    child: Text(
+                      picking ? _activeTitle : _title,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                    ),
+                  ),
                   IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
                 ],
               ),
             ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                children: [
-                  if (widget.mode == AddressPickerMode.browse) ...[
-                    FilledButton.icon(
-                      onPressed: _busyGps ? null : _useGps,
-                      style: FilledButton.styleFrom(backgroundColor: brand, minimumSize: const Size.fromHeight(48)),
-                      icon: _busyGps
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.my_location),
-                      label: const Text('Konumumu kullan (20 km çevrem)'),
+            if (picking) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: TextField(
+                  controller: _search,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Ara…',
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('${filtered.length} sonuç', style: const TextStyle(color: inkSoft, fontSize: 12)),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    final item = filtered[index];
+                    final selected = switch (_pickField) {
+                      _PickField.city => item == _city,
+                      _PickField.district => item == _district,
+                      _PickField.neighborhood => item == _neighborhood,
+                      _PickField.none => false,
+                    };
+                    return ListTile(
+                      title: Text(item),
+                      trailing: selected ? const Icon(Icons.check, color: brand) : null,
+                      onTap: () => _selectItem(item),
+                    );
+                  },
+                ),
+              ),
+            ] else ...[
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  children: [
+                    if (widget.mode == AddressPickerMode.browse) ...[
+                      FilledButton.icon(
+                        onPressed: _busyGps ? null : _useGps,
+                        style: FilledButton.styleFrom(backgroundColor: brand, minimumSize: const Size.fromHeight(48)),
+                        icon: _busyGps
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.my_location),
+                        label: const Text('Konumumu kullan (20 km çevrem)'),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '81 il · ${catalog.neighbourhoodCount} mahalle · sabit 20 km vitrin',
+                        style: const TextStyle(color: inkSoft, fontSize: 12),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('Başka şehir / adres', style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 8),
+                    ],
+                    _SelectTile(
+                      label: 'İl',
+                      value: _city,
+                      helper: '${catalog.cities.length} il',
+                      onTap: () => _openPick(_PickField.city),
+                    ),
+                    const SizedBox(height: 10),
+                    _SelectTile(
+                      label: 'İlçe',
+                      value: _district,
+                      helper: _city == null ? 'Önce il seç' : '${_districts.length} ilçe',
+                      enabled: _city != null,
+                      onTap: () => _openPick(_PickField.district),
+                    ),
+                    const SizedBox(height: 10),
+                    _SelectTile(
+                      label: 'Mahalle',
+                      value: _neighborhood,
+                      helper: _district == null ? 'Önce ilçe seç' : '${_neighborhoods.length} mahalle',
+                      enabled: _district != null,
+                      onTap: () => _openPick(_PickField.neighborhood),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _street,
+                      decoration: const InputDecoration(
+                        labelText: 'Sokak / kapı no (isteğe bağlı)',
+                        hintText: 'Örn: Gül Sokak No:12',
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text('Haritadan nokta seç', style: TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 220,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: _showMap
+                            ? FlutterMap(
+                                mapController: _mapController,
+                                options: MapOptions(
+                                  initialCenter: _pin,
+                                  initialZoom: 14,
+                                  onMapReady: () {
+                                    _mapReady = true;
+                                    _safeMove(_pin, 14);
+                                  },
+                                  onTap: (tap, point) => setState(() => _pin = point),
+                                ),
+                                children: [
+                                  TileLayer(
+                                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                    userAgentPackageName: 'com.komsuas.komsuas',
+                                  ),
+                                  MarkerLayer(
+                                    markers: [
+                                      Marker(
+                                        point: _pin,
+                                        width: 40,
+                                        height: 40,
+                                        child: const Icon(Icons.location_pin, color: brand, size: 40),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              )
+                            : const ColoredBox(
+                                color: Color(0xFFE8EEF0),
+                                child: Center(child: CircularProgressIndicator(color: brand)),
+                              ),
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '81 il · ${catalog.neighbourhoodCount} mahalle · sabit 20 km vitrin',
+                      'Lat ${_pin.latitude.toStringAsFixed(5)}, Lng ${_pin.longitude.toStringAsFixed(5)}',
                       style: const TextStyle(color: inkSoft, fontSize: 12),
                     ),
-                    const SizedBox(height: 16),
-                    const Text('Başka şehir / adres', style: TextStyle(fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 8),
+                    if (widget.mode != AddressPickerMode.browse) ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: _busyGps ? null : _useGps,
+                        icon: const Icon(Icons.gps_fixed),
+                        label: const Text('Pin’i GPS konumuma taşı'),
+                      ),
+                    ],
                   ],
-                  _SelectTile(
-                    label: 'İl',
-                    value: _city,
-                    helper: '${catalog.cities.length} il',
-                    onTap: () async {
-                      final value = await _pickFromList(title: 'İl seç', items: catalog.cities, selected: _city);
-                      if (value == null) return;
-                      setState(() {
-                        _city = value;
-                        _district = null;
-                        _neighborhood = null;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  _SelectTile(
-                    label: 'İlçe',
-                    value: _district,
-                    helper: _city == null ? 'Önce il seç' : '${_districts.length} ilçe',
-                    enabled: _city != null,
-                    onTap: () async {
-                      final value = await _pickFromList(title: 'İlçe seç', items: _districts, selected: _district);
-                      if (value == null) return;
-                      setState(() {
-                        _district = value;
-                        _neighborhood = null;
-                      });
-                      _applyDistrictCoords();
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  _SelectTile(
-                    label: 'Mahalle',
-                    value: _neighborhood,
-                    helper: _district == null ? 'Önce ilçe seç' : '${_neighborhoods.length} mahalle',
-                    enabled: _district != null,
-                    onTap: () async {
-                      final value = await _pickFromList(
-                        title: 'Mahalle seç',
-                        items: _neighborhoods,
-                        selected: _neighborhood,
-                      );
-                      if (value == null) return;
-                      setState(() => _neighborhood = value);
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _street,
-                    decoration: const InputDecoration(
-                      labelText: 'Sokak / kapı no (isteğe bağlı)',
-                      hintText: 'Örn: Gül Sokak No:12',
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  const Text('Haritadan nokta seç', style: TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 220,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(18),
-                      child: _showMap
-                          ? FlutterMap(
-                              mapController: _mapController,
-                              options: MapOptions(
-                                initialCenter: _pin,
-                                initialZoom: 14,
-                                onTap: (tap, point) => setState(() => _pin = point),
-                              ),
-                              children: [
-                                TileLayer(
-                                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                  userAgentPackageName: 'com.komsuas.komsuas',
-                                ),
-                                MarkerLayer(
-                                  markers: [
-                                    Marker(
-                                      point: _pin,
-                                      width: 40,
-                                      height: 40,
-                                      child: const Icon(Icons.location_pin, color: brand, size: 40),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            )
-                          : const ColoredBox(
-                              color: Color(0xFFE8EEF0),
-                              child: Center(child: CircularProgressIndicator(color: brand)),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Lat ${_pin.latitude.toStringAsFixed(5)}, Lng ${_pin.longitude.toStringAsFixed(5)}',
-                    style: const TextStyle(color: inkSoft, fontSize: 12),
-                  ),
-                  if (widget.mode != AddressPickerMode.browse) ...[
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: _busyGps ? null : _useGps,
-                      icon: const Icon(Icons.gps_fixed),
-                      label: const Text('Pin’i GPS konumuma taşı'),
-                    ),
-                  ],
-                ],
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-              child: FilledButton(
-                onPressed: _confirm,
-                style: FilledButton.styleFrom(backgroundColor: brand, minimumSize: const Size.fromHeight(50)),
-                child: Text(widget.mode == AddressPickerMode.browse ? 'Bu adrese göre göster' : 'Adresi kaydet'),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                child: FilledButton(
+                  onPressed: _confirm,
+                  style: FilledButton.styleFrom(backgroundColor: brand, minimumSize: const Size.fromHeight(50)),
+                  child: Text(widget.mode == AddressPickerMode.browse ? 'Bu adrese göre göster' : 'Adresi kaydet'),
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
