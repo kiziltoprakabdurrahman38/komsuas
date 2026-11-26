@@ -1,82 +1,156 @@
-class DistrictNode {
-  const DistrictNode(this.name, this.lat, this.lng, this.neighborhoods);
+import 'dart:convert';
 
-  final String name;
+import 'package:flutter/services.dart';
+
+class DistrictCoords {
+  const DistrictCoords(this.lat, this.lng);
+
   final double lat;
   final double lng;
-  final List<String> neighborhoods;
 }
 
-class CityNode {
-  const CityNode(this.name, this.districts);
+class TurkeyCatalog {
+  TurkeyCatalog._({
+    required this.cities,
+    required this.districtsByCity,
+    required this.neighbourhoodsByCityDistrict,
+    required this.centersByCityDistrict,
+    required this.codeByCityName,
+  });
 
-  final String name;
-  final List<DistrictNode> districts;
-}
+  final List<String> cities;
+  final Map<String, List<String>> districtsByCity;
+  final Map<String, Map<String, List<String>>> neighbourhoodsByCityDistrict;
+  final Map<String, Map<String, DistrictCoords>> centersByCityDistrict;
+  final Map<String, String> codeByCityName;
 
-const turkeyCities = <CityNode>[
-  CityNode('İstanbul', [
-    DistrictNode('Kadıköy', 40.9927, 29.0270, ['Caferağa', 'Moda', 'Osmanağa', 'Fenerbahçe', 'Göztepe', 'Kozyatağı']),
-    DistrictNode('Beşiktaş', 41.0428, 29.0077, ['Levent', 'Etiler', 'Bebek', 'Ortaköy', 'Sinanpaşa', 'Abbasağa']),
-    DistrictNode('Üsküdar', 41.0265, 29.0150, ['Altunizade', 'Çengelköy', 'Kuzguncuk', 'Salacak', 'Acıbadem']),
-    DistrictNode('Şişli', 41.0602, 28.9877, ['Nişantaşı', 'Osmanbey', 'Mecidiyeköy', 'Bomonti']),
-    DistrictNode('Fatih', 41.0186, 28.9397, ['Sultanahmet', 'Aksaray', 'Fındıkzade', 'Kocamustafapaşa']),
-  ]),
-  CityNode('Ankara', [
-    DistrictNode('Çankaya', 39.9010, 32.8600, ['Kızılay', 'Bahçelievler', 'Çayyolu', 'Oran', 'Yıldız']),
-    DistrictNode('Yenimahalle', 39.9700, 32.8000, ['Demetevler', 'Batıkent', 'İvedik', 'Yenimahalle Merkez']),
-    DistrictNode('Keçiören', 39.9860, 32.8620, ['Etlik', 'Ovacık', 'Aktepe']),
-  ]),
-  CityNode('İzmir', [
-    DistrictNode('Karşıyaka', 38.4550, 27.1120, ['Bostanlı', 'Mavişehir', 'Donanmacı', 'Alaybey']),
-    DistrictNode('Konak', 38.4190, 27.1280, ['Alsancak', 'Göztepe', 'Güzelyalı', 'Kahramanlar']),
-    DistrictNode('Bornova', 38.4660, 27.2200, ['Erzene', 'Evka-3', 'Kazımdirik']),
-  ]),
-  CityNode('Kayseri', [
-    DistrictNode('Melikgazi', 38.7205, 35.4826, ['Cumhuriyet', 'Gültepe', 'Anafartalar', 'Esenyurt', 'Hunat']),
-    DistrictNode('Kocasinan', 38.7380, 35.4720, ['Yenişehir', 'Sanayi', 'Erciyesevler', 'Barbaros']),
-    DistrictNode('Talas', 38.6940, 35.5560, ['Mevlana', 'Yenidoğan', 'Harman']),
-    DistrictNode('Hacılar', 38.6470, 35.4540, ['Hacılar Merkez', 'Yukarı']),
-  ]),
-  CityNode('Gaziantep', [
-    DistrictNode('Şahinbey', 37.0500, 37.3700, ['İbrahimli', 'Güneş', 'Karataş', 'Ünaldı']),
-    DistrictNode('Şehitkamil', 37.0800, 37.3900, ['Gazi', 'İncili Pınar', 'Karşıyaka']),
-  ]),
-  CityNode('Trabzon', [
-    DistrictNode('Ortahisar', 41.0020, 39.7200, ['Kemerkaya', 'Pazarkapı', 'Boztepe']),
-    DistrictNode('Akçaabat', 41.0200, 39.5700, ['Söğütlü', 'Yıldızlı', 'Akçaabat Merkez']),
-  ]),
-  CityNode('Adana', [
-    DistrictNode('Seyhan', 36.9950, 35.3200, ['Çınarlı', 'Reşatbey', 'Kurtuluş', 'Ziyapaşa']),
-    DistrictNode('Çukurova', 37.0400, 35.2800, ['Yurt', 'Mahfesığmaz', 'Güzelyalı']),
-  ]),
-  CityNode('Bursa', [
-    DistrictNode('Nilüfer', 40.2100, 28.9800, ['Özlüce', 'Görükle', 'Konak', 'Beşevler']),
-    DistrictNode('Osmangazi', 40.1900, 29.0600, ['Soğanlı', 'Hüdavendigar', 'Çekirge']),
-  ]),
-  CityNode('Antalya', [
-    DistrictNode('Muratpaşa', 36.8850, 30.7050, ['Fener', 'Şirinyalı', 'Meltem', 'Güzeloba']),
-    DistrictNode('Konyaaltı', 36.8700, 30.6400, ['Liman', 'Hurma', 'Arapsuyu']),
-  ]),
-  CityNode('Hatay', [
-    DistrictNode('Antakya', 36.2020, 36.1600, ['Cebrail', 'Elektrik', 'Gazi']),
-  ]),
-];
+  static TurkeyCatalog? _instance;
 
-List<String> cityNames() => turkeyCities.map((c) => c.name).toList();
-
-CityNode? cityByName(String name) {
-  for (final city in turkeyCities) {
-    if (city.name == name) return city;
+  static TurkeyCatalog get instance {
+    final current = _instance;
+    if (current == null) {
+      throw StateError('TurkeyCatalog.load() henüz çağrılmadı.');
+    }
+    return current;
   }
-  return null;
+
+  static Future<TurkeyCatalog> load() async {
+    if (_instance != null) return _instance!;
+
+    final cityListRaw = await rootBundle.loadString('assets/turkey/cityList.json');
+    final districtsRaw = await rootBundle.loadString('assets/turkey/districtsByCityCode.json');
+    final neighbourhoodsRaw =
+        await rootBundle.loadString('assets/turkey/neighbourhoodsByDistrictAndCityCode.json');
+    final centersRaw = await rootBundle.loadString('assets/turkey/districtCenters.json');
+
+    final cityList = (jsonDecode(cityListRaw) as List<dynamic>)
+        .map((item) => item as Map<String, dynamic>)
+        .toList();
+    final districtsByCode = (jsonDecode(districtsRaw) as Map<String, dynamic>).map(
+      (code, value) => MapEntry(
+        code,
+        (value as List<dynamic>).map((item) => item as String).toList()..sort(),
+      ),
+    );
+    final neighbourhoodsByCode = (jsonDecode(neighbourhoodsRaw) as Map<String, dynamic>).map(
+      (code, districts) => MapEntry(
+        code,
+        (districts as Map<String, dynamic>).map(
+          (district, rows) => MapEntry(
+            district,
+            (rows as List<dynamic>)
+                .map((item) => _cleanNeighborhood(item as String))
+                .where((item) => item.isNotEmpty)
+                .toSet()
+                .toList()
+              ..sort(),
+          ),
+        ),
+      ),
+    );
+    final centersByCode = (jsonDecode(centersRaw) as Map<String, dynamic>).map(
+      (code, districts) => MapEntry(
+        code,
+        (districts as Map<String, dynamic>).map(
+          (district, pair) {
+            final coords = pair as List<dynamic>;
+            return MapEntry(
+              district,
+              DistrictCoords((coords[0] as num).toDouble(), (coords[1] as num).toDouble()),
+            );
+          },
+        ),
+      ),
+    );
+
+    final codeByCityName = <String, String>{};
+    final cities = <String>[];
+    for (final row in cityList) {
+      final code = row['code'] as String;
+      final name = row['name'] as String;
+      codeByCityName[name] = code;
+      cities.add(name);
+    }
+    cities.sort();
+
+    final districtsByCity = <String, List<String>>{};
+    final neighbourhoodsByCityDistrict = <String, Map<String, List<String>>>{};
+    final centersByCityDistrict = <String, Map<String, DistrictCoords>>{};
+
+    for (final entry in codeByCityName.entries) {
+      final city = entry.key;
+      final code = entry.value;
+      districtsByCity[city] = districtsByCode[code] ?? const [];
+      neighbourhoodsByCityDistrict[city] = neighbourhoodsByCode[code] ?? const {};
+      centersByCityDistrict[city] = centersByCode[code] ?? const {};
+    }
+
+    _instance = TurkeyCatalog._(
+      cities: cities,
+      districtsByCity: districtsByCity,
+      neighbourhoodsByCityDistrict: neighbourhoodsByCityDistrict,
+      centersByCityDistrict: centersByCityDistrict,
+      codeByCityName: codeByCityName,
+    );
+    return _instance!;
+  }
+
+  static String _cleanNeighborhood(String raw) {
+    return raw
+        .replaceAll(RegExp(r'\s+Mah\.?$', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s+Mahallesi$', caseSensitive: false), '')
+        .trim();
+  }
+
+  List<String> districtsOf(String city) => districtsByCity[city] ?? const [];
+
+  List<String> neighbourhoodsOf(String city, String district) {
+    return neighbourhoodsByCityDistrict[city]?[district] ?? const [];
+  }
+
+  DistrictCoords? centerOf(String city, String district) {
+    return centersByCityDistrict[city]?[district];
+  }
+
+  int get neighbourhoodCount {
+    var total = 0;
+    for (final districts in neighbourhoodsByCityDistrict.values) {
+      for (final rows in districts.values) {
+        total += rows.length;
+      }
+    }
+    return total;
+  }
 }
 
-DistrictNode? districtByName(String city, String district) {
-  final node = cityByName(city);
-  if (node == null) return null;
-  for (final item in node.districts) {
-    if (item.name == district) return item;
-  }
-  return null;
+List<String> cityNames() => TurkeyCatalog.instance.cities;
+
+List<String> districtsOfCity(String city) => TurkeyCatalog.instance.districtsOf(city);
+
+List<String> neighbourhoodsOfDistrict(String city, String district) {
+  return TurkeyCatalog.instance.neighbourhoodsOf(city, district);
+}
+
+DistrictCoords? districtCenter(String city, String district) {
+  return TurkeyCatalog.instance.centerOf(city, district);
 }

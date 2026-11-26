@@ -36,7 +36,7 @@ class _MarketViewState extends State<MarketView> {
     final rows = store.meals.where((meal) {
       if (meal.portions <= 0) return false;
       if (_kind != 'all' && meal.kind != _kind) return false;
-      if (kmBetween(store.centerLat, store.centerLng, meal.lat, meal.lng) > store.radiusKm) {
+      if (kmBetween(store.centerLat, store.centerLng, meal.lat, meal.lng) > AppStore.radiusKm) {
         return false;
       }
       if (q.isEmpty) return true;
@@ -56,8 +56,6 @@ class _MarketViewState extends State<MarketView> {
       context,
       mode: AddressPickerMode.browse,
       initial: widget.store.browseAddress,
-      radiusKm: widget.store.radiusKm,
-      onRadiusChanged: widget.store.setRadiusKm,
     );
     if (selected != null) {
       widget.store.setBrowseAddress(selected);
@@ -76,8 +74,8 @@ class _MarketViewState extends State<MarketView> {
             final meals = _visible();
             final store = widget.store;
             final chipLabel = store.useGpsBrowse
-                ? 'Yakınım · ${store.radiusKm.toStringAsFixed(0)} km'
-                : '${store.browseAddress.shortLabel} · ${store.radiusKm.toStringAsFixed(0)} km';
+                ? 'Yakınım · 20 km'
+                : '${store.browseAddress.shortLabel} · 20 km';
 
             return SafeArea(
               child: Column(
@@ -151,8 +149,8 @@ class _MarketViewState extends State<MarketView> {
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                     child: Text(
                       meals.isEmpty
-                          ? '${store.radiusKm.toStringAsFixed(0)} km içinde ilan yok — adresi veya mesafeyi değiştir'
-                          : '${meals.length} ilan · ${store.radiusKm.toStringAsFixed(0)} km çevresi',
+                          ? '20 km içinde ilan yok — konum veya adresi değiştir'
+                          : '${meals.length} ilan · 20 km çevresi',
                       style: const TextStyle(color: inkSoft),
                     ),
                   ),

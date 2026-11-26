@@ -16,13 +16,12 @@ class AppStore extends ChangeNotifier {
     required this.displayName,
     required this.browseAddress,
     required this.orderAddress,
-    required this.radiusKm,
     required this.useGpsBrowse,
   });
 
-  static const _key = 'komsuas_local_v2';
+  static const _key = 'komsuas_local_v3';
   static const depositRate = 0.30;
-  static const radiusChoices = <double>[5, 10, 15, 20, 30];
+  static const radiusKm = 20.0;
 
   final List<Meal> meals;
   final List<LocalOrder> orders;
@@ -30,7 +29,6 @@ class AppStore extends ChangeNotifier {
   String displayName;
   UserAddress browseAddress;
   UserAddress? orderAddress;
-  double radiusKm;
   bool useGpsBrowse;
 
   double get centerLat => browseAddress.lat;
@@ -38,7 +36,7 @@ class AppStore extends ChangeNotifier {
 
   static Future<AppStore> open() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key);
+    final raw = prefs.getString(_key) ?? prefs.getString('komsuas_local_v2');
     late final AppStore store;
     if (raw == null) {
       store = AppStore(
@@ -48,7 +46,6 @@ class AppStore extends ChangeNotifier {
         displayName: 'Abdurrahman Kızıltoprak',
         browseAddress: defaultBrowse,
         orderAddress: null,
-        radiusKm: 20,
         useGpsBrowse: true,
       );
     } else {
@@ -68,7 +65,6 @@ class AppStore extends ChangeNotifier {
         orderAddress: json['orderAddress'] != null
             ? UserAddress.fromJson(json['orderAddress'] as Map<String, dynamic>)
             : null,
-        radiusKm: (json['radiusKm'] as num?)?.toDouble() ?? 20,
         useGpsBrowse: json['useGpsBrowse'] as bool? ?? true,
       );
     }
@@ -88,7 +84,6 @@ class AppStore extends ChangeNotifier {
         'displayName': displayName,
         'browseAddress': browseAddress.toJson(),
         'orderAddress': orderAddress?.toJson(),
-        'radiusKm': radiusKm,
         'useGpsBrowse': useGpsBrowse,
       }),
     );
@@ -140,12 +135,6 @@ class AppStore extends ChangeNotifier {
 
   void setOrderAddress(UserAddress address) {
     orderAddress = address;
-    notifyListeners();
-    persist();
-  }
-
-  void setRadiusKm(double km) {
-    radiusKm = km;
     notifyListeners();
     persist();
   }

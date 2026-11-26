@@ -4,10 +4,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'screens/shell.dart';
 import 'store.dart';
 import 'theme.dart';
+import 'turkey_places.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   GoogleFonts.config.allowRuntimeFetching = true;
+  await TurkeyCatalog.load();
   runApp(const KomsuasApp());
 }
 

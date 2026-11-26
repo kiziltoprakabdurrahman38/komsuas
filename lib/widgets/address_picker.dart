@@ -4,7 +4,6 @@ import 'package:latlong2/latlong.dart';
 
 import '../location_service.dart';
 import '../models.dart';
-import '../store.dart';
 import '../theme.dart';
 import '../turkey_places.dart';
 
@@ -14,8 +13,6 @@ Future<UserAddress?> showAddressPicker(
   BuildContext context, {
   required AddressPickerMode mode,
   UserAddress? initial,
-  double? radiusKm,
-  ValueChanged<double>? onRadiusChanged,
 }) {
   return showModalBottomSheet<UserAddress>(
     context: context,
@@ -25,29 +22,16 @@ Future<UserAddress?> showAddressPicker(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
     builder: (context) {
-      return AddressPickerSheet(
-        mode: mode,
-        initial: initial,
-        radiusKm: radiusKm,
-        onRadiusChanged: onRadiusChanged,
-      );
+      return AddressPickerSheet(mode: mode, initial: initial);
     },
   );
 }
 
 class AddressPickerSheet extends StatefulWidget {
-  const AddressPickerSheet({
-    super.key,
-    required this.mode,
-    this.initial,
-    this.radiusKm,
-    this.onRadiusChanged,
-  });
+  const AddressPickerSheet({super.key, required this.mode, this.initial});
 
   final AddressPickerMode mode;
   final UserAddress? initial;
-  final double? radiusKm;
-  final ValueChanged<double>? onRadiusChanged;
 
   @override
   State<AddressPickerSheet> createState() => _AddressPickerSheetState();
@@ -59,7 +43,7 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
   late String? _neighborhood;
   late final TextEditingController _street;
   late LatLng _pin;
-  late double _radius;
+  final _mapController = MapController();
   bool _busyGps = false;
 
   @override
@@ -71,7 +55,6 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
     _neighborhood = seed?.neighborhood.isNotEmpty == true ? seed!.neighborhood : null;
     _street = TextEditingController(text: seed?.street ?? '');
     _pin = LatLng(seed?.lat ?? 38.7205, seed?.lng ?? 35.4826);
-    _radius = widget.radiusKm ?? 20;
   }
 
   @override
@@ -80,20 +63,20 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
     super.dispose();
   }
 
-  List<DistrictNode> get _districts {
-    final city = cityByName(_city ?? '');
-    return city?.districts ?? const [];
-  }
+  List<String> get _districts => _city == null ? const [] : districtsOfCity(_city!);
 
   List<String> get _neighborhoods {
-    final district = districtByName(_city ?? '', _district ?? '');
-    return district?.neighborhoods ?? const [];
+    if (_city == null || _district == null) return const [];
+    return neighbourhoodsOfDistrict(_city!, _district!);
   }
 
   void _applyDistrictCoords() {
-    final district = districtByName(_city ?? '', _district ?? '');
-    if (district == null) return;
-    setState(() => _pin = LatLng(district.lat, district.lng));
+    if (_city == null || _district == null) return;
+    final center = districtCenter(_city!, _district!);
+    if (center == null) return;
+    final point = LatLng(center.lat, center.lng);
+    setState(() => _pin = point);
+    _mapController.move(point, 14);
   }
 
   Future<void> _useGps() async {
@@ -122,7 +105,85 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
       );
       return;
     }
-    setState(() => _pin = LatLng(position.latitude, position.longitude));
+    final point = LatLng(position.latitude, position.longitude);
+    setState(() => _pin = point);
+    _mapController.move(point, 16);
+  }
+
+  Future<String?> _pickFromList({
+    required String title,
+    required List<String> items,
+    String? selected,
+  }) async {
+    final query = TextEditingController();
+    var filtered = List<String>.from(items);
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheet) {
+            return SafeArea(
+              child: SizedBox(
+                height: MediaQuery.sizeOf(context).height * 0.75,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
+                      child: Row(
+                        children: [
+                          Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18))),
+                          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: TextField(
+                        controller: query,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.search),
+                          hintText: 'Ara…',
+                        ),
+                        onChanged: (value) {
+                          final q = value.trim().toLowerCase();
+                          setSheet(() {
+                            filtered = items
+                                .where((item) => q.isEmpty || item.toLowerCase().contains(q))
+                                .toList();
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final item = filtered[index];
+                          return ListTile(
+                            title: Text(item),
+                            trailing: item == selected ? const Icon(Icons.check, color: brand) : null,
+                            onTap: () => Navigator.pop(context, item),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    query.dispose();
+    return result;
   }
 
   void _confirm() {
@@ -132,12 +193,18 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
       );
       return;
     }
+    if (_neighborhood == null || _neighborhood!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mahalle seçmelisin.')),
+      );
+      return;
+    }
     Navigator.pop(
       context,
       UserAddress(
         city: _city!,
         district: _district!,
-        neighborhood: _neighborhood ?? '',
+        neighborhood: _neighborhood!,
         street: _street.text.trim(),
         lat: _pin.latitude,
         lng: _pin.longitude,
@@ -159,7 +226,8 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final height = MediaQuery.sizeOf(context).height * 0.9;
+    final height = MediaQuery.sizeOf(context).height * 0.92;
+    final catalog = TurkeyCatalog.instance;
     return SizedBox(
       height: height,
       child: SafeArea(
@@ -187,36 +255,24 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
                       icon: _busyGps
                           ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                           : const Icon(Icons.my_location),
-                      label: const Text('Konumumu kullan (çevremdekiler)'),
+                      label: const Text('Konumumu kullan (20 km çevrem)'),
                     ),
-                    const SizedBox(height: 12),
-                    const Text('Mesafe', style: TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        for (final km in AppStore.radiusChoices)
-                          ChoiceChip(
-                            label: Text('${km.toStringAsFixed(0)} km'),
-                            selected: _radius == km,
-                            onSelected: (_) {
-                              setState(() => _radius = km);
-                              widget.onRadiusChanged?.call(km);
-                            },
-                          ),
-                      ],
+                    Text(
+                      '81 il · ${catalog.neighbourhoodCount} mahalle · sabit 20 km vitrin',
+                      style: const TextStyle(color: inkSoft, fontSize: 12),
                     ),
                     const SizedBox(height: 16),
                     const Text('Başka şehir / adres', style: TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),
                   ],
-                  DropdownButtonFormField<String>(
-                    initialValue: _city,
-                    decoration: const InputDecoration(labelText: 'İl'),
-                    items: [
-                      for (final name in cityNames()) DropdownMenuItem(value: name, child: Text(name)),
-                    ],
-                    onChanged: (value) {
+                  _SelectTile(
+                    label: 'İl',
+                    value: _city,
+                    helper: '${catalog.cities.length} il',
+                    onTap: () async {
+                      final value = await _pickFromList(title: 'İl seç', items: catalog.cities, selected: _city);
+                      if (value == null) return;
                       setState(() {
                         _city = value;
                         _district = null;
@@ -225,30 +281,36 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
                     },
                   ),
                   const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    initialValue: _district,
-                    decoration: const InputDecoration(labelText: 'İlçe'),
-                    items: [
-                      for (final item in _districts) DropdownMenuItem(value: item.name, child: Text(item.name)),
-                    ],
-                    onChanged: _city == null
-                        ? null
-                        : (value) {
-                            setState(() {
-                              _district = value;
-                              _neighborhood = null;
-                            });
-                            _applyDistrictCoords();
-                          },
+                  _SelectTile(
+                    label: 'İlçe',
+                    value: _district,
+                    helper: _city == null ? 'Önce il seç' : '${_districts.length} ilçe',
+                    enabled: _city != null,
+                    onTap: () async {
+                      final value = await _pickFromList(title: 'İlçe seç', items: _districts, selected: _district);
+                      if (value == null) return;
+                      setState(() {
+                        _district = value;
+                        _neighborhood = null;
+                      });
+                      _applyDistrictCoords();
+                    },
                   ),
                   const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    initialValue: _neighborhood,
-                    decoration: const InputDecoration(labelText: 'Mahalle'),
-                    items: [
-                      for (final name in _neighborhoods) DropdownMenuItem(value: name, child: Text(name)),
-                    ],
-                    onChanged: _district == null ? null : (value) => setState(() => _neighborhood = value),
+                  _SelectTile(
+                    label: 'Mahalle',
+                    value: _neighborhood,
+                    helper: _district == null ? 'Önce ilçe seç' : '${_neighborhoods.length} mahalle',
+                    enabled: _district != null,
+                    onTap: () async {
+                      final value = await _pickFromList(
+                        title: 'Mahalle seç',
+                        items: _neighborhoods,
+                        selected: _neighborhood,
+                      );
+                      if (value == null) return;
+                      setState(() => _neighborhood = value);
+                    },
                   ),
                   const SizedBox(height: 10),
                   TextField(
@@ -266,6 +328,7 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(18),
                       child: FlutterMap(
+                        mapController: _mapController,
                         options: MapOptions(
                           initialCenter: _pin,
                           initialZoom: 14,
@@ -315,6 +378,46 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SelectTile extends StatelessWidget {
+  const _SelectTile({
+    required this.label,
+    required this.value,
+    required this.onTap,
+    this.helper,
+    this.enabled = true,
+  });
+
+  final String label;
+  final String? value;
+  final String? helper;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(14),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          helperText: helper,
+          enabled: enabled,
+          suffixIcon: const Icon(Icons.expand_more),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        child: Text(
+          value ?? 'Seç',
+          style: TextStyle(
+            color: value == null ? inkSoft : ink,
+            fontWeight: value == null ? FontWeight.w500 : FontWeight.w700,
+          ),
         ),
       ),
     );
