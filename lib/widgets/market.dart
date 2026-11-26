@@ -20,9 +20,12 @@ class MarketView extends StatefulWidget {
   State<MarketView> createState() => _MarketViewState();
 }
 
+enum _SortMode { nearest, cheapest, newest }
+
 class _MarketViewState extends State<MarketView> {
   final _query = TextEditingController();
   String _kind = 'all';
+  _SortMode _sort = _SortMode.nearest;
 
   @override
   void initState() {
@@ -64,11 +67,28 @@ class _MarketViewState extends State<MarketView> {
       return blob.contains(q);
     }).toList();
     rows.sort((a, b) {
-      final da = kmBetween(store.centerLat, store.centerLng, a.lat, a.lng);
-      final db = kmBetween(store.centerLat, store.centerLng, b.lat, b.lng);
-      return da.compareTo(db);
+      switch (_sort) {
+        case _SortMode.cheapest:
+          return a.price.compareTo(b.price);
+        case _SortMode.newest:
+          return b.id.compareTo(a.id);
+        case _SortMode.nearest:
+          final da = kmBetween(store.centerLat, store.centerLng, a.lat, a.lng);
+          final db = kmBetween(store.centerLat, store.centerLng, b.lat, b.lng);
+          return da.compareTo(db);
+      }
     });
     return rows;
+  }
+
+  Future<void> _refresh() async {
+    final ok = await widget.store.refreshGpsIfNeeded();
+    if (!mounted) return;
+    if (!ok && widget.store.useGpsBrowse) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Konum yenilenemedi. Adres seçerek de bakabilirsin.')),
+      );
+    }
   }
 
   Future<void> _openAddressPicker() async {
@@ -163,33 +183,82 @@ class _MarketViewState extends State<MarketView> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-            child: Text(
-              meals.isEmpty
-                  ? '20 km içinde ilan yok — konum veya adresi değiştir'
-                  : '${meals.length} ilan · 20 km çevresi',
-              style: const TextStyle(color: inkSoft),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    meals.isEmpty ? '20 km içinde ilan yok' : '${meals.length} ilan · 20 km',
+                    style: const TextStyle(color: inkSoft),
+                  ),
+                ),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<_SortMode>(
+                    value: _sort,
+                    isDense: true,
+                    items: const [
+                      DropdownMenuItem(value: _SortMode.nearest, child: Text('En yakın')),
+                      DropdownMenuItem(value: _SortMode.cheapest, child: Text('En ucuz')),
+                      DropdownMenuItem(value: _SortMode.newest, child: Text('En yeni')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => _sort = value);
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
           Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                mainAxisExtent: 292,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              itemCount: meals.length,
-              itemBuilder: (context, index) {
-                final meal = meals[index];
-                final distance = kmBetween(store.centerLat, store.centerLng, meal.lat, meal.lng);
-                return MealCard(
-                  meal: meal,
-                  distanceKm: distance,
-                  onOpen: () => showMealDetail(context, store, meal),
-                );
-              },
+            child: RefreshIndicator(
+              color: brand,
+              onRefresh: _refresh,
+              child: meals.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
+                      children: [
+                        Icon(Icons.ramen_dining_outlined, size: 48, color: brand.withValues(alpha: 0.45)),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Bu çevrede aktif ilan yok.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Başka ilçe seç veya konumunu yenile.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: inkSoft),
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton(
+                          onPressed: _openAddressPicker,
+                          style: FilledButton.styleFrom(backgroundColor: brand),
+                          child: const Text('Adres değiştir'),
+                        ),
+                      ],
+                    )
+                  : GridView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        mainAxisExtent: 292,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                      ),
+                      itemCount: meals.length,
+                      itemBuilder: (context, index) {
+                        final meal = meals[index];
+                        final distance = kmBetween(store.centerLat, store.centerLng, meal.lat, meal.lng);
+                        return MealCard(
+                          meal: meal,
+                          distanceKm: distance,
+                          onOpen: () => showMealDetail(context, store, meal),
+                        );
+                      },
+                    ),
             ),
           ),
         ],

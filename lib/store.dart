@@ -144,6 +144,18 @@ class AppStore extends ChangeNotifier {
     persist();
   }
 
+  void setDisplayName(String name) {
+    final clean = name.trim();
+    if (clean.length < 3) return;
+    displayName = clean;
+    notifyListeners();
+    persist();
+  }
+
+  int get activeListingCount => meals.where((meal) => meal.userAdded && meal.portions > 0).length;
+
+  int get openOrderCount => orders.where((order) => !order.delivered).length;
+
   String? shareMeal({
     required String title,
     required String description,
@@ -181,40 +193,44 @@ class AppStore extends ChangeNotifier {
     return null;
   }
 
-  String? reserve(Meal meal, {required UserAddress userAddress, int count = 1}) {
-    if (meal.portions < count) return 'Yeterli porsiyon kalmadı.';
+  /// Returns `(error, order)`. On success `error` is null and `order` is set.
+  (String? error, LocalOrder? order) reserve(
+    Meal meal, {
+    required UserAddress userAddress,
+    int count = 1,
+  }) {
+    if (count < 1) return ('En az 1 porsiyon seçmelisin.', null);
+    if (meal.portions < count) return ('Yeterli porsiyon kalmadı.', null);
     if (userAddress.city.isEmpty || userAddress.district.isEmpty) {
-      return 'Sipariş için adresini seçmelisin.';
+      return ('Sipariş için adresini seçmelisin.', null);
     }
     final total = meal.price * count;
     final deposit = (total * depositRate * 100).round() / 100;
     if (wallet + 0.001 < deposit) {
-      return 'Kapora için cüzdanda en az ${deposit.toStringAsFixed(0)} ₺ olmalı.';
+      return ('Kapora için cüzdanda en az ${deposit.toStringAsFixed(0)} ₺ olmalı.', null);
     }
     meal.portions -= count;
     wallet -= deposit;
     orderAddress = userAddress;
     final code = (Random.secure().nextInt(900000) + 100000).toString();
-    orders.insert(
-      0,
-      LocalOrder(
-        id: 'o${DateTime.now().millisecondsSinceEpoch}',
-        mealId: meal.id,
-        mealTitle: meal.title,
-        chef: meal.chef,
-        portions: count,
-        total: total,
-        deposit: deposit,
-        cashDue: total - deposit,
-        code: code,
-        status: 'reserved',
-        createdAt: DateTime.now().toIso8601String(),
-        userAddressLabel: userAddress.fullLabel,
-      ),
+    final order = LocalOrder(
+      id: 'o${DateTime.now().millisecondsSinceEpoch}',
+      mealId: meal.id,
+      mealTitle: meal.title,
+      chef: meal.chef,
+      portions: count,
+      total: total,
+      deposit: deposit,
+      cashDue: total - deposit,
+      code: code,
+      status: 'reserved',
+      createdAt: DateTime.now().toIso8601String(),
+      userAddressLabel: userAddress.fullLabel,
     );
+    orders.insert(0, order);
     notifyListeners();
     persist();
-    return null;
+    return (null, order);
   }
 
   bool confirmDelivery(LocalOrder order, String entered) {

@@ -29,11 +29,15 @@ class MealCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
                   gradient: LinearGradient(
-                    colors: meal.kind == 'tatli'
-                        ? const [Color(0xFFFDE68A), Color(0xFFF59E0B)]
-                        : meal.kind == 'corba'
-                            ? const [Color(0xFFBAE6FD), Color(0xFF0284C7)]
-                            : const [Color(0xFFA7F3D0), Color(0xFF0F766E)],
+                    colors: switch (meal.kind) {
+                      'tatli' => const [Color(0xFFFDE68A), Color(0xFFF59E0B)],
+                      'corba' => const [Color(0xFFBAE6FD), Color(0xFF0284C7)],
+                      'salata' => const [Color(0xFFBBF7D0), Color(0xFF16A34A)],
+                      'borek' || 'manti' || 'simit' => const [Color(0xFFFED7AA), Color(0xFFEA580C)],
+                      'icecek' => const [Color(0xFFA5F3FC), Color(0xFF0891B2)],
+                      'kahvalti' => const [Color(0xFFFBCFE8), Color(0xFFDB2777)],
+                      _ => const [Color(0xFFA7F3D0), Color(0xFF0F766E)],
+                    },
                   ),
                 ),
                 alignment: Alignment.bottomLeft,

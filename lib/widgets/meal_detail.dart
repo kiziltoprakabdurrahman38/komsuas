@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../layout.dart';
 import '../models.dart';
@@ -55,7 +56,7 @@ Future<void> showMealDetail(BuildContext context, AppStore store, Meal meal) asy
   );
 }
 
-class MealDetailView extends StatelessWidget {
+class MealDetailView extends StatefulWidget {
   const MealDetailView({
     super.key,
     required this.store,
@@ -70,12 +71,81 @@ class MealDetailView extends StatelessWidget {
   final ScrollController? scrollController;
 
   @override
+  State<MealDetailView> createState() => _MealDetailViewState();
+}
+
+class _MealDetailViewState extends State<MealDetailView> {
+  int _count = 1;
+
+  Meal get meal => widget.meal;
+  AppStore get store => widget.store;
+
+  Future<void> _reserve() async {
+    final address = await showAddressPicker(
+      context,
+      mode: AddressPickerMode.order,
+      initial: store.orderAddress ?? (store.browseAddress.fromGps ? null : store.browseAddress),
+    );
+    if (address == null || !mounted) return;
+    final (error, order) = store.reserve(meal, userAddress: address, count: _count);
+    if (!mounted) return;
+    if (error != null || order == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error ?? 'Rezervasyon başarısız.')));
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Rezervasyon tamam'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${order.mealTitle} · ${order.portions} porsiyon'),
+              const SizedBox(height: 8),
+              Text('Kapora ${order.deposit.toStringAsFixed(0)} ₺ alındı.'),
+              Text('Kapıda ${order.cashDue.toStringAsFixed(0)} ₺ ödeyeceksin.'),
+              const SizedBox(height: 12),
+              const Text('Teslimat kodun', style: TextStyle(color: inkSoft)),
+              const SizedBox(height: 4),
+              SelectableText(
+                order.code,
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: 4),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: order.code));
+                if (dialogContext.mounted) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(content: Text('Kod panoya kopyalandı.')),
+                  );
+                }
+              },
+              child: const Text('Kodu kopyala'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              style: FilledButton.styleFrom(backgroundColor: brand),
+              child: const Text('Tamam'),
+            ),
+          ],
+        );
+      },
+    );
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final media = split
+    final media = widget.split
         ? Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: _visuals(meal)),
+              Expanded(child: _visuals()),
               const SizedBox(width: 20),
               Expanded(child: _facts(context)),
             ],
@@ -83,7 +153,7 @@ class MealDetailView extends StatelessWidget {
         : Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _visuals(meal),
+              _visuals(),
               const SizedBox(height: 16),
               _facts(context),
             ],
@@ -91,13 +161,16 @@ class MealDetailView extends StatelessWidget {
 
     return SafeArea(
       child: ListView(
-        controller: scrollController,
+        controller: widget.scrollController,
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
           Row(
             children: [
               Expanded(
-                child: Text(meal.title, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+                child: Text(
+                  meal.title,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
               ),
               IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
             ],
@@ -109,7 +182,7 @@ class MealDetailView extends StatelessWidget {
     );
   }
 
-  Widget _visuals(Meal meal) {
+  Widget _visuals() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -133,8 +206,9 @@ class MealDetailView extends StatelessWidget {
   }
 
   Widget _facts(BuildContext context) {
-    final deposit = meal.price * AppStore.depositRate;
-    final cash = meal.price - deposit;
+    final deposit = meal.price * _count * AppStore.depositRate;
+    final cash = meal.price * _count - deposit;
+    final maxCount = meal.portions.clamp(0, 12);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -142,11 +216,38 @@ class MealDetailView extends StatelessWidget {
         const SizedBox(height: 4),
         Text(meal.placeLabel, style: const TextStyle(color: inkSoft)),
         const SizedBox(height: 12),
-        Text('${meal.price.toStringAsFixed(0)} ₺ / porsiyon', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: brandDeep)),
-        const SizedBox(height: 8),
-        Text('Kapora %30: ${deposit.toStringAsFixed(0)} ₺', style: const TextStyle(color: inkSoft)),
-        Text('Kapıda ödeme: ${cash.toStringAsFixed(0)} ₺', style: const TextStyle(color: inkSoft)),
-        Text(meal.portions > 0 ? '${meal.portions} porsiyon kaldı' : 'Porsiyon tükendi', style: const TextStyle(color: inkSoft)),
+        Text(
+          '${meal.price.toStringAsFixed(0)} ₺ / porsiyon',
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: brandDeep),
+        ),
+        const SizedBox(height: 12),
+        if (meal.portions > 0) ...[
+          const Text('Porsiyon', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              IconButton.filledTonal(
+                onPressed: _count > 1 ? () => setState(() => _count -= 1) : null,
+                icon: const Icon(Icons.remove),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text('$_count', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              ),
+              IconButton.filledTonal(
+                onPressed: _count < maxCount ? () => setState(() => _count += 1) : null,
+                icon: const Icon(Icons.add),
+              ),
+              const SizedBox(width: 8),
+              Text('${meal.portions} kaldı', style: const TextStyle(color: inkSoft)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text('Kapora %30: ${deposit.toStringAsFixed(0)} ₺', style: const TextStyle(color: inkSoft)),
+          Text('Kapıda ödeme: ${cash.toStringAsFixed(0)} ₺', style: const TextStyle(color: inkSoft)),
+          Text('Toplam: ${(meal.price * _count).toStringAsFixed(0)} ₺', style: const TextStyle(fontWeight: FontWeight.w700)),
+        ] else
+          const Text('Porsiyon tükendi', style: TextStyle(color: inkSoft)),
         const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
@@ -160,25 +261,9 @@ class MealDetailView extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: FilledButton(
-            onPressed: meal.portions <= 0
-                ? null
-                : () async {
-                    final address = await showAddressPicker(
-                      context,
-                      mode: AddressPickerMode.order,
-                      initial: store.orderAddress ??
-                          (store.browseAddress.fromGps ? null : store.browseAddress),
-                    );
-                    if (address == null || !context.mounted) return;
-                    final error = store.reserve(meal, userAddress: address);
-                    final messenger = ScaffoldMessenger.of(context);
-                    Navigator.pop(context);
-                    messenger.showSnackBar(
-                      SnackBar(content: Text(error ?? 'Rezerve edildi. Teslimat kodu Siparişlerim’de.')),
-                    );
-                  },
+            onPressed: meal.portions <= 0 ? null : _reserve,
             style: FilledButton.styleFrom(backgroundColor: brand, minimumSize: const Size.fromHeight(48)),
-            child: const Text('Şimdi Rezerve Et'),
+            child: Text(_count > 1 ? '$_count Porsiyon Rezerve Et' : 'Şimdi Rezerve Et'),
           ),
         ),
       ],
