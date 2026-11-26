@@ -54,7 +54,9 @@ class MealCard extends StatelessWidget {
               Text(meal.chef, style: const TextStyle(color: inkSoft, fontSize: 13)),
               const SizedBox(height: 2),
               Text(
-                '${meal.district}, ${meal.city} · ${distanceKm.toStringAsFixed(1)} km',
+                '${meal.placeLabel} · ${distanceKm.toStringAsFixed(1)} km',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: inkSoft, fontSize: 12),
               ),
               const Spacer(),

@@ -1,3 +1,5 @@
+import 'categories.dart';
+
 class Meal {
   Meal({
     required this.id,
@@ -11,6 +13,7 @@ class Meal {
     required this.district,
     required this.description,
     required this.kind,
+    this.neighborhood = '',
     this.userAdded = false,
   });
 
@@ -23,21 +26,16 @@ class Meal {
   final double lng;
   final String city;
   final String district;
+  final String neighborhood;
   final String description;
   final String kind;
   final bool userAdded;
 
-  String get kindLabel {
-    switch (kind) {
-      case 'hamur':
-        return 'Hamur İşi';
-      case 'corba':
-        return 'Çorba';
-      case 'tatli':
-        return 'Tatlı';
-      default:
-        return 'Ana Yemek';
-    }
+  String get kindLabel => categoryLabel(kind);
+
+  String get placeLabel {
+    final parts = [if (neighborhood.isNotEmpty) neighborhood, district, city];
+    return parts.join(', ');
   }
 
   Map<String, dynamic> toJson() => {
@@ -50,6 +48,7 @@ class Meal {
         'lng': lng,
         'city': city,
         'district': district,
+        'neighborhood': neighborhood,
         'description': description,
         'kind': kind,
         'userAdded': userAdded,
@@ -66,9 +65,101 @@ class Meal {
       lng: (json['lng'] as num).toDouble(),
       city: json['city'] as String,
       district: json['district'] as String,
+      neighborhood: json['neighborhood'] as String? ?? '',
       description: json['description'] as String,
-      kind: json['kind'] as String,
+      kind: _migrateKind(json['kind'] as String? ?? 'ana'),
       userAdded: json['userAdded'] as bool? ?? false,
+    );
+  }
+
+  static String _migrateKind(String kind) {
+    if (kind == 'hamur') return 'manti';
+    return kind;
+  }
+}
+
+class UserAddress {
+  const UserAddress({
+    required this.city,
+    required this.district,
+    required this.neighborhood,
+    required this.lat,
+    required this.lng,
+    this.street = '',
+    this.note = '',
+    this.fromGps = false,
+  });
+
+  final String city;
+  final String district;
+  final String neighborhood;
+  final String street;
+  final String note;
+  final double lat;
+  final double lng;
+  final bool fromGps;
+
+  String get shortLabel {
+    if (fromGps && city.isEmpty) return 'Yakınım (GPS)';
+    if (neighborhood.isNotEmpty) return '$neighborhood, $district';
+    if (district.isNotEmpty) return '$district, $city';
+    return city.isEmpty ? 'Adres seçilmedi' : city;
+  }
+
+  String get fullLabel {
+    final parts = <String>[
+      if (street.trim().isNotEmpty) street.trim(),
+      if (neighborhood.isNotEmpty) neighborhood,
+      if (district.isNotEmpty) district,
+      if (city.isNotEmpty) city,
+    ];
+    if (parts.isEmpty) return fromGps ? 'Yakınım (GPS)' : 'Adres seçilmedi';
+    return parts.join(', ');
+  }
+
+  UserAddress copyWith({
+    String? city,
+    String? district,
+    String? neighborhood,
+    String? street,
+    String? note,
+    double? lat,
+    double? lng,
+    bool? fromGps,
+  }) {
+    return UserAddress(
+      city: city ?? this.city,
+      district: district ?? this.district,
+      neighborhood: neighborhood ?? this.neighborhood,
+      street: street ?? this.street,
+      note: note ?? this.note,
+      lat: lat ?? this.lat,
+      lng: lng ?? this.lng,
+      fromGps: fromGps ?? this.fromGps,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'city': city,
+        'district': district,
+        'neighborhood': neighborhood,
+        'street': street,
+        'note': note,
+        'lat': lat,
+        'lng': lng,
+        'fromGps': fromGps,
+      };
+
+  factory UserAddress.fromJson(Map<String, dynamic> json) {
+    return UserAddress(
+      city: json['city'] as String? ?? '',
+      district: json['district'] as String? ?? '',
+      neighborhood: json['neighborhood'] as String? ?? '',
+      street: json['street'] as String? ?? '',
+      note: json['note'] as String? ?? '',
+      lat: (json['lat'] as num?)?.toDouble() ?? 38.7205,
+      lng: (json['lng'] as num?)?.toDouble() ?? 35.4826,
+      fromGps: json['fromGps'] as bool? ?? false,
     );
   }
 }
@@ -86,6 +177,7 @@ class LocalOrder {
     required this.code,
     required this.status,
     required this.createdAt,
+    this.userAddressLabel = '',
   });
 
   final String id;
@@ -99,6 +191,7 @@ class LocalOrder {
   final String code;
   String status;
   final String createdAt;
+  final String userAddressLabel;
 
   bool get delivered => status == 'delivered';
 
@@ -114,6 +207,7 @@ class LocalOrder {
         'code': code,
         'status': status,
         'createdAt': createdAt,
+        'userAddressLabel': userAddressLabel,
       };
 
   factory LocalOrder.fromJson(Map<String, dynamic> json) {
@@ -129,24 +223,7 @@ class LocalOrder {
       code: json['code'] as String,
       status: json['status'] as String,
       createdAt: json['createdAt'] as String,
+      userAddressLabel: json['userAddressLabel'] as String? ?? '',
     );
   }
-}
-
-class Place {
-  const Place(this.city, this.district, this.lat, this.lng);
-
-  final String city;
-  final String district;
-  final double lat;
-  final double lng;
-
-  String get label => '$district, $city';
-
-  @override
-  bool operator ==(Object other) =>
-      other is Place && other.city == city && other.district == district;
-
-  @override
-  int get hashCode => Object.hash(city, district);
 }

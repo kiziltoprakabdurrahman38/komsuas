@@ -4,6 +4,7 @@ import '../layout.dart';
 import '../models.dart';
 import '../store.dart';
 import '../theme.dart';
+import 'address_picker.dart';
 import 'directions.dart';
 import 'meal_map.dart';
 
@@ -139,7 +140,7 @@ class MealDetailView extends StatelessWidget {
       children: [
         Text(meal.chef, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
-        Text('${meal.district}, ${meal.city}', style: const TextStyle(color: inkSoft)),
+        Text(meal.placeLabel, style: const TextStyle(color: inkSoft)),
         const SizedBox(height: 12),
         Text('${meal.price.toStringAsFixed(0)} ₺ / porsiyon', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: brandDeep)),
         const SizedBox(height: 8),
@@ -161,8 +162,15 @@ class MealDetailView extends StatelessWidget {
           child: FilledButton(
             onPressed: meal.portions <= 0
                 ? null
-                : () {
-                    final error = store.reserve(meal);
+                : () async {
+                    final address = await showAddressPicker(
+                      context,
+                      mode: AddressPickerMode.order,
+                      initial: store.orderAddress ??
+                          (store.browseAddress.fromGps ? null : store.browseAddress),
+                    );
+                    if (address == null || !context.mounted) return;
+                    final error = store.reserve(meal, userAddress: address);
                     final messenger = ScaffoldMessenger.of(context);
                     Navigator.pop(context);
                     messenger.showSnackBar(

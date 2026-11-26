@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../categories.dart';
 import '../geo.dart';
 import '../layout.dart';
 import '../models.dart';
-import '../seed.dart';
 import '../store.dart';
 import '../theme.dart';
+import 'address_picker.dart';
 import 'meal_card.dart';
 import 'meal_detail.dart';
 
@@ -30,48 +31,37 @@ class _MarketViewState extends State<MarketView> {
   }
 
   List<Meal> _visible() {
-    final place = widget.store.place;
+    final store = widget.store;
     final q = _query.text.trim().toLowerCase();
-    final rows = widget.store.meals.where((meal) {
+    final rows = store.meals.where((meal) {
       if (meal.portions <= 0) return false;
       if (_kind != 'all' && meal.kind != _kind) return false;
-      if (kmBetween(place.lat, place.lng, meal.lat, meal.lng) > 80) return false;
+      if (kmBetween(store.centerLat, store.centerLng, meal.lat, meal.lng) > store.radiusKm) {
+        return false;
+      }
       if (q.isEmpty) return true;
-      final blob = '${meal.title} ${meal.chef} ${meal.description} ${meal.city}'.toLowerCase();
+      final blob = '${meal.title} ${meal.chef} ${meal.description} ${meal.city} ${meal.district}'.toLowerCase();
       return blob.contains(q);
     }).toList();
     rows.sort((a, b) {
-      final da = kmBetween(place.lat, place.lng, a.lat, a.lng);
-      final db = kmBetween(place.lat, place.lng, b.lat, b.lng);
+      final da = kmBetween(store.centerLat, store.centerLng, a.lat, a.lng);
+      final db = kmBetween(store.centerLat, store.centerLng, b.lat, b.lng);
       return da.compareTo(db);
     });
     return rows;
   }
 
-  Future<void> _pickPlace() async {
-    final selected = await showModalBottomSheet<Place>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) {
-        return SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              const ListTile(title: Text('İl, İlçe', style: TextStyle(fontWeight: FontWeight.w800))),
-              for (final place in places)
-                ListTile(
-                  title: Text(place.label),
-                  trailing: place.label == widget.store.place.label ? const Icon(Icons.check, color: brand) : null,
-                  onTap: () => Navigator.pop(context, place),
-                ),
-            ],
-          ),
-        );
-      },
+  Future<void> _openAddressPicker() async {
+    final selected = await showAddressPicker(
+      context,
+      mode: AddressPickerMode.browse,
+      initial: widget.store.browseAddress,
+      radiusKm: widget.store.radiusKm,
+      onRadiusChanged: widget.store.setRadiusKm,
     );
-    if (selected != null) widget.store.choosePlace(selected);
+    if (selected != null) {
+      widget.store.setBrowseAddress(selected);
+    }
   }
 
   @override
@@ -84,6 +74,11 @@ class _MarketViewState extends State<MarketView> {
             final mode = classifyScreen(size, orientation);
             final columns = gridColumns(mode, size.width);
             final meals = _visible();
+            final store = widget.store;
+            final chipLabel = store.useGpsBrowse
+                ? 'Yakınım · ${store.radiusKm.toStringAsFixed(0)} km'
+                : '${store.browseAddress.shortLabel} · ${store.radiusKm.toStringAsFixed(0)} km';
+
             return SafeArea(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -99,14 +94,17 @@ class _MarketViewState extends State<MarketView> {
                         Align(
                           alignment: Alignment.centerLeft,
                           child: TextButton.icon(
-                            onPressed: _pickPlace,
+                            onPressed: _openAddressPicker,
                             style: TextButton.styleFrom(
                               backgroundColor: Colors.white.withValues(alpha: 0.7),
                               foregroundColor: ink,
                               shape: const StadiumBorder(side: BorderSide(color: Color(0x1A022C22))),
                             ),
-                            icon: const Icon(Icons.location_on_outlined, size: 18),
-                            label: Text('${widget.store.place.city}, ${widget.store.place.district} ▾'),
+                            icon: Icon(
+                              store.useGpsBrowse ? Icons.my_location : Icons.location_on_outlined,
+                              size: 18,
+                            ),
+                            label: Text('$chipLabel ▾'),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -134,19 +132,13 @@ class _MarketViewState extends State<MarketView> {
                           scrollDirection: Axis.horizontal,
                           child: Row(
                             children: [
-                              for (final filter in const [
-                                ('all', 'Tümü'),
-                                ('ana', 'Ana Yemek'),
-                                ('hamur', 'Hamur İşi'),
-                                ('corba', 'Çorba'),
-                                ('tatli', 'Tatlı'),
-                              ])
+                              for (final filter in mealCategories)
                                 Padding(
                                   padding: const EdgeInsets.only(right: 8),
                                   child: ChoiceChip(
-                                    label: Text(filter.$2),
-                                    selected: _kind == filter.$1,
-                                    onSelected: (_) => setState(() => _kind = filter.$1),
+                                    label: Text(filter.label),
+                                    selected: _kind == filter.id,
+                                    onSelected: (_) => setState(() => _kind = filter.id),
                                   ),
                                 ),
                             ],
@@ -158,7 +150,9 @@ class _MarketViewState extends State<MarketView> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                     child: Text(
-                      meals.isEmpty ? 'Bu çevrede ilan yok' : '${meals.length} aktif ilan',
+                      meals.isEmpty
+                          ? '${store.radiusKm.toStringAsFixed(0)} km içinde ilan yok — adresi veya mesafeyi değiştir'
+                          : '${meals.length} ilan · ${store.radiusKm.toStringAsFixed(0)} km çevresi',
                       style: const TextStyle(color: inkSoft),
                     ),
                   ),
@@ -174,11 +168,11 @@ class _MarketViewState extends State<MarketView> {
                       itemCount: meals.length,
                       itemBuilder: (context, index) {
                         final meal = meals[index];
-                        final distance = kmBetween(widget.store.place.lat, widget.store.place.lng, meal.lat, meal.lng);
+                        final distance = kmBetween(store.centerLat, store.centerLng, meal.lat, meal.lng);
                         return MealCard(
                           meal: meal,
                           distanceKm: distance,
-                          onOpen: () => showMealDetail(context, widget.store, meal),
+                          onOpen: () => showMealDetail(context, store, meal),
                         );
                       },
                     ),

@@ -63,6 +63,8 @@ class OrdersScreen extends StatelessWidget {
                       children: [
                         Text(order.mealTitle, style: const TextStyle(fontWeight: FontWeight.w800)),
                         Text('${order.chef} · ${order.portions} porsiyon', style: const TextStyle(color: inkSoft)),
+                        if (order.userAddressLabel.isNotEmpty)
+                          Text(order.userAddressLabel, style: const TextStyle(color: inkSoft, fontSize: 12)),
                         const SizedBox(height: 6),
                         Text('Kapora ${order.deposit.toStringAsFixed(0)} ₺ · Kapıda ${order.cashDue.toStringAsFixed(0)} ₺'),
                         Text('Teslimat kodu: ${order.code}', style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1.2)),
