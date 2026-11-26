@@ -43,8 +43,9 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
   late String? _neighborhood;
   late final TextEditingController _street;
   late LatLng _pin;
-  final _mapController = MapController();
+  late final MapController _mapController = MapController();
   bool _busyGps = false;
+  bool _showMap = false;
 
   @override
   void initState() {
@@ -55,11 +56,15 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
     _neighborhood = seed?.neighborhood.isNotEmpty == true ? seed!.neighborhood : null;
     _street = TextEditingController(text: seed?.street ?? '');
     _pin = LatLng(seed?.lat ?? 38.7205, seed?.lng ?? 35.4826);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _showMap = true);
+    });
   }
 
   @override
   void dispose() {
     _street.dispose();
+    _mapController.dispose();
     super.dispose();
   }
 
@@ -327,30 +332,35 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
                     height: 220,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(18),
-                      child: FlutterMap(
-                        mapController: _mapController,
-                        options: MapOptions(
-                          initialCenter: _pin,
-                          initialZoom: 14,
-                          onTap: (tap, point) => setState(() => _pin = point),
-                        ),
-                        children: [
-                          TileLayer(
-                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                            userAgentPackageName: 'com.komsuas.komsuas',
-                          ),
-                          MarkerLayer(
-                            markers: [
-                              Marker(
-                                point: _pin,
-                                width: 40,
-                                height: 40,
-                                child: const Icon(Icons.location_pin, color: brand, size: 40),
+                      child: _showMap
+                          ? FlutterMap(
+                              mapController: _mapController,
+                              options: MapOptions(
+                                initialCenter: _pin,
+                                initialZoom: 14,
+                                onTap: (tap, point) => setState(() => _pin = point),
                               ),
-                            ],
-                          ),
-                        ],
-                      ),
+                              children: [
+                                TileLayer(
+                                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                  userAgentPackageName: 'com.komsuas.komsuas',
+                                ),
+                                MarkerLayer(
+                                  markers: [
+                                    Marker(
+                                      point: _pin,
+                                      width: 40,
+                                      height: 40,
+                                      child: const Icon(Icons.location_pin, color: brand, size: 40),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            )
+                          : const ColoredBox(
+                              color: Color(0xFFE8EEF0),
+                              child: Center(child: CircularProgressIndicator(color: brand)),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 8),

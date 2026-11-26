@@ -19,71 +19,78 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _index = 0;
+  late final List<Widget> _pages;
 
   @override
-  Widget build(BuildContext context) {
-    final pages = [
-      MarketView(store: widget.store, autofocusSearch: false),
-      MarketView(store: widget.store, autofocusSearch: true),
+  void initState() {
+    super.initState();
+    _pages = [
+      MarketView(key: const ValueKey('home'), store: widget.store, autofocusSearch: false),
+      MarketView(key: const ValueKey('search'), store: widget.store, autofocusSearch: true),
       ShareScreen(store: widget.store),
       OrdersScreen(store: widget.store),
       ProfileScreen(store: widget.store),
     ];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.store.refreshGpsIfNeeded();
+    });
+  }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return OrientationBuilder(
-          builder: (context, orientation) {
-            final size = MediaQuery.sizeOf(context);
-            final mode = classifyScreen(size, orientation);
-            final bottom = usesBottomBar(mode);
-            return ListenableBuilder(
-              listenable: widget.store,
-              builder: (context, _) {
-                return Scaffold(
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final orientation = MediaQuery.orientationOf(context);
+    final mode = classifyScreen(size, orientation);
+    final bottom = usesBottomBar(mode);
+
+    return ListenableBuilder(
+      listenable: widget.store,
+      builder: (context, _) {
+        return Scaffold(
+          backgroundColor: sage,
+          body: Row(
+            children: [
+              if (!bottom)
+                NavigationRail(
+                  extended: railExtended(mode),
                   backgroundColor: sage,
-                  body: Row(
-                    children: [
-                      if (!bottom)
-                        NavigationRail(
-                          extended: railExtended(mode),
-                          backgroundColor: sage,
-                          selectedIndex: _index,
-                          onDestinationSelected: (value) => setState(() => _index = value),
-                          labelType: railExtended(mode) ? NavigationRailLabelType.none : NavigationRailLabelType.all,
-                          destinations: const [
-                            NavigationRailDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: Text('Ana Sayfa')),
-                            NavigationRailDestination(icon: Icon(Icons.search), label: Text('Ara')),
-                            NavigationRailDestination(icon: Icon(Icons.add_circle, color: brand), label: Text('Yemek Paylaş')),
-                            NavigationRailDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: Text('Siparişlerim')),
-                            NavigationRailDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: Text('Profilim')),
-                          ],
-                        ),
-                      Expanded(child: pages[_index]),
-                    ],
-                  ),
-                  bottomNavigationBar: bottom
-                      ? NavigationBar(
-                          backgroundColor: sage,
-                          selectedIndex: _index,
-                          onDestinationSelected: (value) => setState(() => _index = value),
-                          destinations: const [
-                            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Ana Sayfa'),
-                            NavigationDestination(icon: Icon(Icons.search), label: 'Ara'),
-                            NavigationDestination(
-                              icon: _ShareGlyph(selected: false),
-                              selectedIcon: _ShareGlyph(selected: true),
-                              label: 'Paylaş',
-                            ),
-                            NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Siparişlerim'),
-                            NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profilim'),
-                          ],
-                        )
-                      : null,
-                );
-              },
-            );
-          },
+                  selectedIndex: _index,
+                  onDestinationSelected: (value) => setState(() => _index = value),
+                  labelType: railExtended(mode) ? NavigationRailLabelType.none : NavigationRailLabelType.all,
+                  destinations: const [
+                    NavigationRailDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: Text('Ana Sayfa')),
+                    NavigationRailDestination(icon: Icon(Icons.search), label: Text('Ara')),
+                    NavigationRailDestination(icon: Icon(Icons.add_circle, color: brand), label: Text('Yemek Paylaş')),
+                    NavigationRailDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: Text('Siparişlerim')),
+                    NavigationRailDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: Text('Profilim')),
+                  ],
+                ),
+              Expanded(
+                child: IndexedStack(
+                  index: _index,
+                  children: _pages,
+                ),
+              ),
+            ],
+          ),
+          bottomNavigationBar: bottom
+              ? NavigationBar(
+                  backgroundColor: sage,
+                  selectedIndex: _index,
+                  onDestinationSelected: (value) => setState(() => _index = value),
+                  destinations: const [
+                    NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Ana Sayfa'),
+                    NavigationDestination(icon: Icon(Icons.search), label: 'Ara'),
+                    NavigationDestination(
+                      icon: _ShareGlyph(selected: false),
+                      selectedIcon: _ShareGlyph(selected: true),
+                      label: 'Paylaş',
+                    ),
+                    NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Siparişlerim'),
+                    NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profilim'),
+                  ],
+                )
+              : null,
         );
       },
     );

@@ -25,9 +25,29 @@ class _MarketViewState extends State<MarketView> {
   String _kind = 'all';
 
   @override
+  void initState() {
+    super.initState();
+    widget.store.addListener(_onStore);
+  }
+
+  @override
+  void didUpdateWidget(covariant MarketView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.store != widget.store) {
+      oldWidget.store.removeListener(_onStore);
+      widget.store.addListener(_onStore);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.store.removeListener(_onStore);
     _query.dispose();
     super.dispose();
+  }
+
+  void _onStore() {
+    if (mounted) setState(() {});
   }
 
   List<Meal> _visible() {
@@ -64,123 +84,116 @@ class _MarketViewState extends State<MarketView> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return OrientationBuilder(
-          builder: (context, orientation) {
-            final size = MediaQuery.sizeOf(context);
-            final mode = classifyScreen(size, orientation);
-            final columns = gridColumns(mode, size.width);
-            final meals = _visible();
-            final store = widget.store;
-            final chipLabel = store.useGpsBrowse
-                ? 'Yakınım · 20 km'
-                : '${store.browseAddress.shortLabel} · 20 km';
+    final size = MediaQuery.sizeOf(context);
+    final orientation = MediaQuery.orientationOf(context);
+    final mode = classifyScreen(size, orientation);
+    final columns = gridColumns(mode, size.width);
+    final meals = _visible();
+    final store = widget.store;
+    final chipLabel = store.useGpsBrowse
+        ? 'Yakınım · 20 km'
+        : '${store.browseAddress.shortLabel} · 20 km';
 
-            return SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('KomşuAş', style: brandTitle(context)),
-                        const Text('Kapıdan Sıcak Ev Yemeği', style: TextStyle(color: inkSoft, fontSize: 13)),
-                        const SizedBox(height: 10),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
-                            onPressed: _openAddressPicker,
-                            style: TextButton.styleFrom(
-                              backgroundColor: Colors.white.withValues(alpha: 0.7),
-                              foregroundColor: ink,
-                              shape: const StadiumBorder(side: BorderSide(color: Color(0x1A022C22))),
-                            ),
-                            icon: Icon(
-                              store.useGpsBrowse ? Icons.my_location : Icons.location_on_outlined,
-                              size: 18,
-                            ),
-                            label: Text('$chipLabel ▾'),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _query,
-                          autofocus: widget.autofocusSearch,
-                          onChanged: (_) => setState(() {}),
-                          decoration: InputDecoration(
-                            hintText: 'Yemek, malzeme veya aşçı ara',
-                            prefixIcon: const Icon(Icons.search),
-                            filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.8),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(color: Color(0x1A022C22)),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(color: Color(0x1A022C22)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              for (final filter in mealCategories)
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: ChoiceChip(
-                                    label: Text(filter.label),
-                                    selected: _kind == filter.id,
-                                    onSelected: (_) => setState(() => _kind = filter.id),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('KomşuAş', style: brandTitle(context)),
+                const Text('Kapıdan Sıcak Ev Yemeği', style: TextStyle(color: inkSoft, fontSize: 13)),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _openAddressPicker,
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.white.withValues(alpha: 0.7),
+                      foregroundColor: ink,
+                      shape: const StadiumBorder(side: BorderSide(color: Color(0x1A022C22))),
+                    ),
+                    icon: Icon(
+                      store.useGpsBrowse ? Icons.my_location : Icons.location_on_outlined,
+                      size: 18,
+                    ),
+                    label: Text('$chipLabel ▾'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _query,
+                  autofocus: widget.autofocusSearch,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'Yemek, malzeme veya aşçı ara',
+                    prefixIcon: const Icon(Icons.search),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: Color(0x1A022C22)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: Color(0x1A022C22)),
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-                    child: Text(
-                      meals.isEmpty
-                          ? '20 km içinde ilan yok — konum veya adresi değiştir'
-                          : '${meals.length} ilan · 20 km çevresi',
-                      style: const TextStyle(color: inkSoft),
-                    ),
+                ),
+                const SizedBox(height: 10),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final filter in mealCategories)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(filter.label),
+                            selected: _kind == filter.id,
+                            onSelected: (_) => setState(() => _kind = filter.id),
+                          ),
+                        ),
+                    ],
                   ),
-                  Expanded(
-                    child: GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: columns,
-                        mainAxisExtent: 292,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                      ),
-                      itemCount: meals.length,
-                      itemBuilder: (context, index) {
-                        final meal = meals[index];
-                        final distance = kmBetween(store.centerLat, store.centerLng, meal.lat, meal.lng);
-                        return MealCard(
-                          meal: meal,
-                          distanceKm: distance,
-                          onOpen: () => showMealDetail(context, store, meal),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Text(
+              meals.isEmpty
+                  ? '20 km içinde ilan yok — konum veya adresi değiştir'
+                  : '${meals.length} ilan · 20 km çevresi',
+              style: const TextStyle(color: inkSoft),
+            ),
+          ),
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                mainAxisExtent: 292,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
               ),
-            );
-          },
-        );
-      },
+              itemCount: meals.length,
+              itemBuilder: (context, index) {
+                final meal = meals[index];
+                final distance = kmBetween(store.centerLat, store.centerLng, meal.lat, meal.lng);
+                return MealCard(
+                  meal: meal,
+                  distanceKm: distance,
+                  onOpen: () => showMealDetail(context, store, meal),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

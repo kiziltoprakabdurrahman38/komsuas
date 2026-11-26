@@ -14,9 +14,15 @@ class MealMap extends StatefulWidget {
 }
 
 class _MealMapState extends State<MealMap> {
-  final MapController _controller = MapController();
+  late final MapController _controller = MapController();
   bool _satellite = false;
   LatLng? _device;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   Future<Position?> _devicePosition() async {
     final enabled = await Geolocator.isLocationServiceEnabled();

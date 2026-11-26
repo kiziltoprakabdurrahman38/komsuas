@@ -68,7 +68,6 @@ class AppStore extends ChangeNotifier {
         useGpsBrowse: json['useGpsBrowse'] as bool? ?? true,
       );
     }
-    await store.refreshGpsIfNeeded();
     await store.persist();
     return store;
   }
